@@ -35,7 +35,7 @@ import java.util.List;
  * @author Dmitry Avdeev
  */
 public class OpenTaskDialog extends DialogWrapper {
-  private final static Logger LOG = Logger.getInstance("#com.intellij.tasks.actions.SimpleOpenTaskDialog");
+  private final static Logger LOG = Logger.getInstance(OpenTaskDialog.class);
   private static final String UPDATE_STATE_ENABLED = "tasks.open.task.update.state.enabled";
 
   private JPanel myPanel;
@@ -57,7 +57,7 @@ public class OpenTaskDialog extends DialogWrapper {
     myTaskStateCombo.setProject(myProject);
     myTaskStateCombo.setTask(myTask);
 
-    setTitle("Open Task");
+    setTitle(TaskBundle.message("dialog.title.open.task"));
     myNameField.setText(TaskUtil.getTrimmedSummary(task));
     myNameField.setEnabled(!task.isIssue());
 
@@ -101,6 +101,7 @@ public class OpenTaskDialog extends DialogWrapper {
       @Override
       protected void textChanged(@NotNull DocumentEvent e) {
         LocalTaskImpl oldTask = new LocalTaskImpl(myTask);
+        //noinspection HardCodedStringLiteral
         myTask.setSummary(myNameField.getText());
         for (TaskDialogPanel panel : myPanels) {
           panel.taskNameChanged(oldTask, myTask);
@@ -132,7 +133,7 @@ public class OpenTaskDialog extends DialogWrapper {
           repository.setPreferredOpenTaskState(taskState);
         }
         catch (Exception ex) {
-          Messages.showErrorDialog(myProject, ex.getMessage(), "Cannot Set State For Issue");
+          Messages.showErrorDialog(myProject, ex.getMessage(), TaskBundle.message("dialog.title.cannot.set.state.for.issue"));
           LOG.warn(ex);
         }
       }
@@ -179,7 +180,7 @@ public class OpenTaskDialog extends DialogWrapper {
   protected ValidationInfo doValidate() {
     String taskName = myNameField.getText().trim();
     if (taskName.isEmpty()) {
-      return new ValidationInfo("Task name should not be empty", myNameField);
+      return new ValidationInfo(TaskBundle.message("dialog.message.task.name.should.not.be.empty"), myNameField);
     }
     for (TaskDialogPanel panel : myPanels) {
       ValidationInfo validate = panel.validate();

@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.devkit.formConversion
 
 import com.intellij.openapi.fileEditor.FileEditor
@@ -10,7 +10,9 @@ import com.intellij.psi.PsiManager
 import com.intellij.psi.search.ProjectScope
 import com.intellij.ui.EditorNotificationPanel
 import com.intellij.ui.EditorNotifications
+import com.intellij.ui.LightColors
 import com.intellij.uiDesigner.editor.UIFormEditor
+import org.jetbrains.idea.devkit.DevKitBundle
 import org.jetbrains.idea.devkit.util.PsiUtil
 
 /**
@@ -31,11 +33,10 @@ class ConvertFormNotificationProvider : EditorNotifications.Provider<EditorNotif
     val classToBind = fileEditor.editor.rootContainer.classToBind ?: return null
     val psiClass = JavaPsiFacade.getInstance(project).findClass(classToBind, ProjectScope.getProjectScope(project)) ?: return null
 
-    return EditorNotificationPanel().apply {
-      setText("The use of UI Designer in the IntelliJ project is now discouraged")
-      createActionLabel("Convert to UI DSL") {
+    return EditorNotificationPanel(LightColors.RED).apply {
+      setText(DevKitBundle.message("convert.form.editor.notification.label"))
+      createActionLabel(DevKitBundle.message("convert.form.editor.notification.link.convert")) {
         convertFormToUiDsl(psiClass, formPsiFile)
-
       }
     }
   }

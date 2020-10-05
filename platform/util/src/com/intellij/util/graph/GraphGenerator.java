@@ -1,9 +1,7 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.graph;
 
 import com.intellij.openapi.util.Pair;
-import gnu.trove.THashMap;
-import gnu.trove.THashSet;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
@@ -11,9 +9,9 @@ import java.util.*;
 /**
  * @author dsl
  */
-public class GraphGenerator<Node> implements Graph<Node> {
+public final class GraphGenerator<Node> implements Graph<Node> {
   @NotNull
-  public static <T> Graph<T> generate(InboundSemiGraph<T> graph) {
+  public static <T> Graph<T> generate(@NotNull InboundSemiGraph<T> graph) {
     return new GraphGenerator<>(graph);
   }
 
@@ -22,21 +20,18 @@ public class GraphGenerator<Node> implements Graph<Node> {
 
   private GraphGenerator(@NotNull InboundSemiGraph<Node> graph) {
     myGraph = graph;
-    myOuts = new THashMap<>();
+    myOuts = new HashMap<>();
     buildOuts();
   }
 
   private void buildOuts() {
-    final Set<Pair<Node, Node>> edges = new THashSet<>();
-
-    Collection<Node> nodes = myGraph.getNodes();
-
-    for (Node node : nodes) {
+    Set<Pair<Node, Node>> edges = new HashSet<>();
+    for (Node node : myGraph.getNodes()) {
       Iterator<Node> inIt = myGraph.getIn(node);
       while (inIt.hasNext()) {
         Node inNode = inIt.next();
 
-        if (!edges.add(Pair.create(inNode, node))) {
+        if (!edges.add(new Pair<>(inNode, node))) {
           // Duplicate edge
           continue;
         }

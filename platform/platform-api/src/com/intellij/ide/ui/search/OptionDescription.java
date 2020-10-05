@@ -1,8 +1,8 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
-
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.ui.search;
 
 import com.intellij.openapi.util.Comparing;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Objects;
@@ -34,10 +34,12 @@ public class OptionDescription implements Comparable<OptionDescription> {
     myGroupName = groupName;
   }
 
+  @Nls
   public String getOption() {
     return myOption;
   }
 
+  @Nls
   @Nullable
   public String getHit() {
     return myHit;

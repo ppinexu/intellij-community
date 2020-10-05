@@ -17,9 +17,6 @@ package org.jetbrains.intellij.build
 
 import groovy.transform.CompileStatic
 
-/**
- * @author nik
- */
 @CompileStatic
 abstract class MacDistributionCustomizer {
   /**
@@ -70,10 +67,12 @@ abstract class MacDistributionCustomizer {
   String additionalDocTypes = ""
 
   /**
-   * List of file extensions (without leading dot) which installer will associate with the product. Note that users won't be able to switch off some
-   * of these associations during installation so include only types of files which users will definitely prefer to open by the product.
+   * Note that users won't be able to switch off some of these associations during installation
+   * so include only types of files which users will definitely prefer to open by the product.
+   *
+   * @see FileAssociation
    */
-  List<String> fileAssociations = []
+  List<FileAssociation> fileAssociations = []
 
   /**
    * Specify &lt;scheme&gt; here if you want product to be able to open urls like <scheme>://open?file=/some/file/path&line=0
@@ -106,6 +105,10 @@ abstract class MacDistributionCustomizer {
    */
   String dmgImagePathForEAP = null
 
+  /**
+   * If {@code true} will publish sit archive as artifact
+   */
+  boolean publishArchive = false
   /**
    * Application bundle name: &lt;name&gt;.app. Current convention is to have ProductName.app for release and ProductName Version EAP.app.
    * @param applicationInfo application info that can be used to check for EAP and building version

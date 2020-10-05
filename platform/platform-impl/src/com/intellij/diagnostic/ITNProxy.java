@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.diagnostic;
 
 import com.intellij.errorreport.error.InternalEAPException;
@@ -18,7 +18,7 @@ import com.intellij.openapi.util.BuildNumber;
 import com.intellij.openapi.util.NotNullLazyValue;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.io.BufferExposingByteArrayOutputStream;
-import com.intellij.openapi.util.io.FileUtil;
+import com.intellij.openapi.util.io.StreamUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.security.CompositeX509TrustManager;
 import com.intellij.util.io.DigestUtil;
@@ -45,10 +45,7 @@ import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 import java.util.zip.GZIPOutputStream;
 
-/**
- * @author stathik
- */
-class ITNProxy {
+final class ITNProxy {
   private static final String DEFAULT_USER = "idea_anonymous";
   private static final String DEFAULT_PASS = "guest";
   private static final String DEVELOPERS_LIST_URL = "https://ea-engine.labs.intellij.net/data?category=developers";
@@ -67,7 +64,7 @@ class ITNProxy {
     ApplicationNamesInfo namesInfo = ApplicationNamesInfo.getInstance();
     BuildNumber build = appInfo.getBuild();
     String buildNumberWithAllDetails = build.asString();
-    if (StringUtil.startsWith(buildNumberWithAllDetails, build.getProductCode() + "-")) {
+    if (buildNumberWithAllDetails.startsWith(build.getProductCode() + "-")) {
       buildNumberWithAllDetails = buildNumberWithAllDetails.substring(build.getProductCode().length() + 1);
     }
 
@@ -136,7 +133,7 @@ class ITNProxy {
                         @NotNull ErrorBean error,
                         @NotNull IntConsumer onSuccess,
                         @NotNull Consumer<? super Exception> onError) {
-    if (StringUtil.isEmptyOrSpaces(login)) {
+    if (login == null || login.isBlank()) {
       login = DEFAULT_USER;
       password = DEFAULT_PASS;
     }
@@ -175,7 +172,10 @@ class ITNProxy {
       throw new InternalEAPException(DiagnosticBundle.message("error.http.result.code", responseCode));
     }
 
-    String response = FileUtil.loadTextAndClose(connection.getInputStream());
+    String response;
+    try (Reader reader = new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8)) {
+      response = StreamUtil.readText(reader);
+    }
 
     if ("unauthorized".equals(response)) {
       throw new NoSuchEAPUserException(login);
@@ -224,7 +224,7 @@ class ITNProxy {
 
     UpdateSettings updateSettings = UpdateSettings.getInstance();
     append(builder, "update.channel.status", updateSettings.getSelectedChannelStatus().getCode());
-    append(builder, "update.ignored.builds", StringUtil.join(updateSettings.getIgnoredBuildNumbers(), ","));
+    append(builder, "update.ignored.builds", String.join(",", updateSettings.getIgnoredBuildNumbers()));
 
     append(builder, "plugin.id", error.pluginId);
     append(builder, "plugin.name", error.pluginName);
@@ -276,7 +276,7 @@ class ITNProxy {
   }
 
   private static void append(StringBuilder builder, String key, @Nullable String value) {
-    if (!StringUtil.isEmpty(value)) {
+    if (value != null && !value.isEmpty()) {
       String encoded;
       try { encoded = URLEncoder.encode(value, StandardCharsets.UTF_8.name()); }
       catch (UnsupportedEncodingException e) { throw new IllegalStateException(e); }  // not expected to happen

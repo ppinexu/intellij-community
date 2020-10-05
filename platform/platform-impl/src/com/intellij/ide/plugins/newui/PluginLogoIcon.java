@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.plugins.newui;
 
 import com.intellij.icons.AllIcons;
@@ -17,7 +17,7 @@ import java.util.Map;
  * @author Alexander Lobas
  */
 class PluginLogoIcon implements PluginLogoIconProvider {
-  static final Map<Icon, Icon> DisabledIcons = ContainerUtil.createWeakMap(200);
+  static final Map<Icon, Icon> disabledIcons = ContainerUtil.createWeakMap(200);
 
   private final Icon myPluginLogo_40;
   private final Icon myPluginLogoJB_40;
@@ -94,17 +94,19 @@ class PluginLogoIcon implements PluginLogoIconProvider {
       icon = ((IconLoader.LazyIcon)icon).retrieveIcon();
     }
 
-    Icon disabledIcon = DisabledIcons.get(icon);
-    if (disabledIcon == null) {
-      if (base) {
-        disabledIcon = IconLoader.filterIcon(icon, () -> new UIUtil.GrayFilter(), null);
+    synchronized (disabledIcons) {
+      Icon disabledIcon = disabledIcons.get(icon);
+      if (disabledIcon == null) {
+        if (base) {
+          disabledIcon = IconLoader.filterIcon(icon, () -> new UIUtil.GrayFilter(), null);
+        }
+        else {
+          disabledIcon = IconLoader.filterIcon(icon, () -> new UIUtil.GrayFilter(JBColor.isBright() ? 20 : 19, 0, 100), null);
+        }
+        disabledIcons.put(icon, disabledIcon);
       }
-      else {
-        disabledIcon = IconLoader.filterIcon(icon, () -> new UIUtil.GrayFilter(JBColor.isBright() ? 20 : 19, 0, 100), null);
-      }
-      DisabledIcons.put(icon, disabledIcon);
+      return disabledIcon;
     }
-    return disabledIcon;
   }
 
   @NotNull

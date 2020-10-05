@@ -1,6 +1,7 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.jsonSchema.widget;
 
+import com.intellij.json.JsonBundle;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.popup.JBPopupFactory;
 import com.intellij.openapi.ui.popup.ListPopup;
@@ -18,12 +19,12 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class JsonSchemaStatusPopup {
+public final class JsonSchemaStatusPopup {
   static final JsonSchemaInfo ADD_MAPPING = new JsonSchemaInfo("") {
     @NotNull
     @Override
     public String getDescription() {
-      return "New Schema Mapping…";
+      return JsonBundle.message("schema.widget.add.mapping");
     }
   };
 
@@ -31,7 +32,7 @@ public class JsonSchemaStatusPopup {
     @NotNull
     @Override
     public String getDescription() {
-      return "Edit Schema Mappings…";
+      return JsonBundle.message("schema.widget.edit.mappings");
     }
   };
 
@@ -39,7 +40,7 @@ public class JsonSchemaStatusPopup {
     @NotNull
     @Override
     public String getDescription() {
-      return "Load SchemaStore Mappings";
+      return JsonBundle.message("schema.widget.load.mappings");
     }
   };
 

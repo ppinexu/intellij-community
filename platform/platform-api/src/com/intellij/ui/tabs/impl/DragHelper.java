@@ -1,8 +1,9 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.tabs.impl;
 
 import com.intellij.ide.IdeBundle;
 import com.intellij.ide.ui.UISettings;
+import com.intellij.openapi.Disposable;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.reference.SoftReference;
 import com.intellij.ui.InplaceButton;
@@ -12,6 +13,7 @@ import com.intellij.ui.awt.RelativePoint;
 import com.intellij.ui.tabs.JBTabsPosition;
 import com.intellij.ui.tabs.TabInfo;
 import com.intellij.ui.util.Axis;
+import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -21,8 +23,7 @@ import java.awt.event.MouseEvent;
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
 
-class DragHelper extends MouseDragHelper {
-
+final class DragHelper extends MouseDragHelper {
   private final JBTabsImpl myTabs;
   private TabInfo myDragSource;
   private Rectangle myDragOriginalRec;
@@ -33,23 +34,27 @@ class DragHelper extends MouseDragHelper {
   private TabInfo myDragOutSource;
   private Reference<TabLabel> myPressedTabLabel;
 
-  DragHelper(@NotNull JBTabsImpl tabs) {
-    super(tabs, tabs);
+  DragHelper(@NotNull JBTabsImpl tabs, @NotNull Disposable parentDisposable) {
+    super(parentDisposable, tabs);
+
     myTabs = tabs;
   }
 
-
   @Override
   protected boolean isDragOut(@NotNull MouseEvent event, @NotNull Point dragToScreenPoint, @NotNull Point startScreenPoint) {
-    if (myDragSource == null || !myDragSource.canBeDraggedOut()) return false;
+    if (myDragSource == null || !myDragSource.canBeDraggedOut()) {
+      return false;
+    }
 
     TabLabel label = myTabs.myInfo2Label.get(myDragSource);
-    if (label == null) return false;
+    if (label == null) {
+      return false;
+    }
 
     int dX = dragToScreenPoint.x - startScreenPoint.x;
     int dY = dragToScreenPoint.y - startScreenPoint.y;
 
-    return myTabs.getEffectiveLayout().isDragOut(label, dX, dY);
+    return myTabs.isDragOut(label, dX, dY);
   }
 
   @Override
@@ -57,9 +62,8 @@ class DragHelper extends MouseDragHelper {
     TabInfo.DragOutDelegate delegate = myDragOutSource.getDragOutDelegate();
     if (justStarted) {
       delegate.dragOutStarted(event, myDragOutSource);
-    } else {
-      delegate.processDragOut(event, myDragOutSource);
     }
+    delegate.processDragOut(event, myDragOutSource);
     event.consume();
   }
 
@@ -172,7 +176,8 @@ class DragHelper extends MouseDragHelper {
 
     if (measurer.getMinValue(myDragRec) < measurer.getMinValue(myDragOriginalRec)) {
       freeSpace = measurer.getMaxValue(myDragOriginalRec) - measurer.getMaxValue(myDragRec);
-    } else {
+    }
+    else {
       freeSpace = measurer.getMinValue(myDragRec) - measurer.getMinValue(myDragOriginalRec);
     }
 
@@ -222,6 +227,17 @@ class DragHelper extends MouseDragHelper {
   @Override
   protected boolean canStartDragging(@NotNull JComponent dragComponent, @NotNull Point dragComponentPoint) {
     return findLabel(dragComponentPoint) != null;
+  }
+
+  @Override
+  protected boolean canFinishDragging(@NotNull JComponent component, @NotNull RelativePoint point) {
+    Component realDropTarget = UIUtil.getDeepestComponentAt(point.getOriginalComponent(), point.getOriginalPoint().x, point.getOriginalPoint().y);
+    if (realDropTarget == null) realDropTarget = SwingUtilities.getDeepestComponentAt(point.getOriginalComponent(), point.getOriginalPoint().x, point.getOriginalPoint().y);
+    if (myTabs.getVisibleInfos().isEmpty() && realDropTarget != null ) {
+      JBTabsImpl tabs = UIUtil.getParentOfType(JBTabsImpl.class, realDropTarget);
+      if (tabs == null || !tabs.isEditorTabs()) return false;
+    }
+    return !myTabs.contains(point.getPoint(myTabs)) || !myTabs.getVisibleInfos().isEmpty();
   }
 
   @Override

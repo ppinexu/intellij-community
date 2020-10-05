@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.navigation;
 
 import com.intellij.openapi.application.ApplicationManager;
@@ -8,12 +8,14 @@ import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.GenericListComponentUpdater;
 import com.intellij.openapi.ui.popup.JBPopup;
+import com.intellij.openapi.util.NlsContexts.PopupTitle;
+import com.intellij.openapi.util.NlsContexts.ProgressTitle;
 import com.intellij.openapi.util.Ref;
 import com.intellij.usages.Usage;
 import com.intellij.usages.UsageView;
 import com.intellij.usages.impl.UsageViewImpl;
 import com.intellij.util.Alarm;
-import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.SmartList;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
@@ -33,9 +35,9 @@ public abstract class BackgroundUpdaterTaskBase<T> extends Task.Backgroundable {
   private volatile boolean myFinished;
   private volatile ProgressIndicator myIndicator;
 
-  public BackgroundUpdaterTaskBase(@Nullable Project project, @NotNull String title, @Nullable Comparator<T> comparator) {
+  public BackgroundUpdaterTaskBase(@Nullable Project project, @ProgressTitle @NotNull String title, @Nullable Comparator<T> comparator) {
     super(project, title);
-    myData = comparator == null ? ContainerUtil.newSmartList() : new TreeSet<>(comparator);
+    myData = comparator == null ? new SmartList<>() : new TreeSet<>(comparator);
   }
 
   @TestOnly
@@ -49,7 +51,7 @@ public abstract class BackgroundUpdaterTaskBase<T> extends Task.Backgroundable {
     myUsageView = usageView;
   }
 
-  public abstract String getCaption(int size);
+  public abstract @PopupTitle String getCaption(int size);
 
   @Nullable
   protected abstract Usage createUsage(T element);
@@ -87,7 +89,7 @@ public abstract class BackgroundUpdaterTaskBase<T> extends Task.Backgroundable {
       if (myData.contains(element)) return true;
       myData.add(element);
       if (comparator != null && myData instanceof List) {
-        Collections.sort((List)myData, comparator);
+        ((List)myData).sort(comparator);
       }
     }
 

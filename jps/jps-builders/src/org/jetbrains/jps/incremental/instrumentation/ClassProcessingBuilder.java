@@ -2,10 +2,10 @@
 package org.jetbrains.jps.incremental.instrumentation;
 
 import com.intellij.compiler.instrumentation.InstrumentationClassFinder;
-import com.intellij.compiler.instrumentation.InstrumenterClassWriter;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.text.StringUtil;
-import org.jetbrains.annotations.ApiStatus;
+import org.jetbrains.annotations.Nls;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jps.ModuleChunk;
 import org.jetbrains.jps.ProjectPaths;
@@ -16,7 +16,6 @@ import org.jetbrains.jps.incremental.messages.ProgressMessage;
 import org.jetbrains.jps.model.JpsDummyElement;
 import org.jetbrains.jps.model.java.JpsJavaSdkType;
 import org.jetbrains.jps.model.library.sdk.JpsSdk;
-import org.jetbrains.org.objectweb.asm.ClassReader;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -41,7 +40,7 @@ public abstract class ClassProcessingBuilder extends ModuleLevelBuilder {
 
   protected abstract boolean isEnabled(CompileContext context, ModuleChunk chunk);
 
-  protected abstract String getProgressMessage();
+  protected abstract @Nls(capitalization = Nls.Capitalization.Sentence) String getProgressMessage();
 
   @Override
   public void chunkBuildFinished(CompileContext context, ModuleChunk chunk) {
@@ -87,6 +86,7 @@ public abstract class ClassProcessingBuilder extends ModuleLevelBuilder {
     }
   }
 
+  @NotNull
   @Override
   public List<String> getCompilableFileExtensions() {
     return Collections.emptyList();
@@ -130,19 +130,5 @@ public abstract class ClassProcessingBuilder extends ModuleLevelBuilder {
         return null;
       }
     };
-  }
-
-  /** @deprecated use {@link InstrumenterClassWriter#getAsmClassWriterFlags} */
-  @Deprecated
-  @ApiStatus.ScheduledForRemoval(inVersion = "2020.1")
-  public static int getAsmClassWriterFlags(int classFileVersion) {
-    return InstrumenterClassWriter.getAsmClassWriterFlags(classFileVersion);
-  }
-
-  /** @deprecated use {@link InstrumenterClassWriter#getClassFileVersion */
-  @Deprecated
-  @ApiStatus.ScheduledForRemoval(inVersion = "2020.1")
-  public static int getClassFileVersion(ClassReader reader) {
-    return InstrumenterClassWriter.getClassFileVersion(reader);
   }
 }

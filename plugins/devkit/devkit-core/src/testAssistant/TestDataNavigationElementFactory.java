@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.devkit.testAssistant;
 
 import com.intellij.icons.AllIcons;
@@ -11,7 +11,7 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.ui.SimpleTextAttributes;
 import com.intellij.util.FontUtil;
-import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.SmartList;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.idea.devkit.DevKitBundle;
@@ -20,7 +20,7 @@ import org.jetbrains.idea.devkit.testAssistant.vfs.TestDataGroupVirtualFile;
 import javax.swing.*;
 import java.util.*;
 
-public class TestDataNavigationElementFactory {
+public final class TestDataNavigationElementFactory {
   private static final int CREATE_MISSING_FILES_WITHOUT_CONFIRMATION_LIMIT = 3;
 
   private TestDataNavigationElementFactory() {
@@ -46,7 +46,7 @@ public class TestDataNavigationElementFactory {
     return new CreateMissingTestDataFilesNavigationElement(filePaths);
   }
 
-  private static class CreateMissingTestDataFilesNavigationElement implements TestDataNavigationElement {
+  private static final class CreateMissingTestDataFilesNavigationElement implements TestDataNavigationElement {
     private final List<TestDataFile> myFilePaths;
 
     private CreateMissingTestDataFilesNavigationElement(List<TestDataFile> filePaths) {
@@ -96,7 +96,7 @@ public class TestDataNavigationElementFactory {
     }
   }
 
-  private static class TestDataGroupNavigationElement implements TestDataNavigationElement {
+  private static final class TestDataGroupNavigationElement implements TestDataNavigationElement {
     private final Project myProject;
     private final TestDataGroupVirtualFile myGroup;
 
@@ -163,7 +163,7 @@ public class TestDataNavigationElementFactory {
     }
   }
 
-  private static class NonExistingTestDataFileNavigationElement implements TestDataNavigationElement {
+  private static final class NonExistingTestDataFileNavigationElement implements TestDataNavigationElement {
     private final Project myProject;
     private final TestDataFile myPath;
 
@@ -187,15 +187,15 @@ public class TestDataNavigationElementFactory {
     @Override
     public List<Pair<String, SimpleTextAttributes>> getTitleFragments() {
       Pair<String, String> relativePath = TestDataUtil.getRelativePathPairForMissingFile(myProject, myPath.getPath());
-      return ContainerUtil.newSmartList(
-        new Pair<>(myPath.getName() + FontUtil.spaceAndThinSpace(), SimpleTextAttributes.GRAYED_ATTRIBUTES),
-        new Pair<>(relativePath.first == null ? "" : relativePath.first, SimpleTextAttributes.GRAYED_BOLD_ATTRIBUTES),
-        new Pair<>(relativePath.first == null ? "" : "/" + relativePath.second, SimpleTextAttributes.GRAYED_ATTRIBUTES)
-      );
+      Pair<String, SimpleTextAttributes>[] elements =
+        new Pair[]{new Pair<>(myPath.getName() + FontUtil.spaceAndThinSpace(), SimpleTextAttributes.GRAYED_ATTRIBUTES),
+          new Pair<>(relativePath.first == null ? "" : relativePath.first, SimpleTextAttributes.GRAYED_BOLD_ATTRIBUTES),
+          new Pair<>(relativePath.first == null ? "" : "/" + relativePath.second, SimpleTextAttributes.GRAYED_ATTRIBUTES)};
+      return new SmartList<>(elements);
     }
   }
 
-  private static class TestDataFileNavigationElement implements TestDataNavigationElement {
+  private static final class TestDataFileNavigationElement implements TestDataNavigationElement {
     private final Project myProject;
     private final TestDataFile myFile;
 
@@ -226,14 +226,15 @@ public class TestDataNavigationElementFactory {
       if (relativePath == null) {
         // cannot calculate module/project relative path, use absolute path
 
-        return ContainerUtil.newSmartList(new Pair<>(
-          String.format("%s (%s)", myFile.getName(), file.getParent().getPath() + "/"),
+        return new SmartList<>(new Pair<String, SimpleTextAttributes>(
+          String.format("%s (%s)", myFile.getName(), file.getParent().getPath() + "/"), // NON-NLS
           SimpleTextAttributes.REGULAR_ATTRIBUTES));
       }
 
-      return ContainerUtil.newSmartList(new Pair<>(myFile.getName() + FontUtil.spaceAndThinSpace(), SimpleTextAttributes.REGULAR_ATTRIBUTES),
-                                        new Pair<>(relativePath.first, SimpleTextAttributes.GRAYED_BOLD_ATTRIBUTES),
-                                        new Pair<>("/" + relativePath.second, SimpleTextAttributes.GRAYED_ATTRIBUTES));
+      return new SmartList<>((Pair<String, SimpleTextAttributes>[])new Pair[]{
+        new Pair<>(myFile.getName() + FontUtil.spaceAndThinSpace(), SimpleTextAttributes.REGULAR_ATTRIBUTES),
+        new Pair<>(relativePath.first, SimpleTextAttributes.GRAYED_BOLD_ATTRIBUTES),
+        new Pair<>("/" + relativePath.second, SimpleTextAttributes.GRAYED_ATTRIBUTES)});
     }
   }
 }

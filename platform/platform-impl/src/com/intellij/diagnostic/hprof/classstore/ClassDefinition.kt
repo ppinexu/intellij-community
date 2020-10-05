@@ -15,16 +15,21 @@
  */
 package com.intellij.diagnostic.hprof.classstore
 
+import com.intellij.diagnostic.hprof.parser.Type
+import org.jetbrains.annotations.NonNls
 import java.util.function.LongUnaryOperator
 
 class ClassDefinition(val name: String,
                       val id: Long,
                       val superClassId: Long,
+                      val classLoaderId: Long,
                       val instanceSize: Int,
                       val superClassOffset: Int,
                       val refInstanceFields: Array<InstanceField>,
+                      private val primitiveInstanceFields: Array<InstanceField>,
                       val constantFields: LongArray,
-                      val staticFields: Array<StaticField>) {
+                      val objectStaticFields: Array<StaticField>,
+                      val primitiveStaticFields: Array<StaticField>) {
 
   override fun equals(other: Any?): Boolean {
     if (this === other) return true
@@ -45,6 +50,10 @@ class ClassDefinition(val name: String,
     get() = computePrettyName(name)
 
   companion object {
+    const val OBJECT_PREAMBLE_SIZE = 8
+    const val ARRAY_PREAMBLE_SIZE = 12
+
+    @NonNls
     fun computePrettyName(name: String): String {
       if (!name.startsWith('['))
         return name
@@ -70,6 +79,8 @@ class ClassDefinition(val name: String,
         else -> name
       }
     }
+
+    val CLASS_FIELD = InstanceField("<class>", -1, Type.OBJECT)
   }
 
   fun getSuperClass(classStore: ClassStore): ClassDefinition? {
@@ -90,13 +101,13 @@ class ClassDefinition(val name: String,
     val newConstantFields = LongArray(constantFields.size) {
       map(constantFields[it])
     }
-    val newStaticFields = Array(staticFields.size) {
-      val oldStaticField = staticFields[it]
-      StaticField(oldStaticField.name, map(oldStaticField.objectId))
+    val newStaticObjectFields = Array(objectStaticFields.size) {
+      val oldStaticField = objectStaticFields[it]
+      StaticField(oldStaticField.name, map(oldStaticField.value))
     }
     return ClassDefinition(
-      name, map(id), map(superClassId), instanceSize, superClassOffset,
-      refInstanceFields, newConstantFields, newStaticFields
+      name, map(id), map(superClassId), map(classLoaderId), instanceSize, superClassOffset,
+      refInstanceFields, primitiveInstanceFields, newConstantFields, newStaticObjectFields, primitiveStaticFields
     )
   }
 
@@ -111,8 +122,65 @@ class ClassDefinition(val name: String,
     return result
   }
 
+  fun getRefField(classStore: ClassStore, index: Int): InstanceField {
+    var currentIndex = index
+    var currentClass = this
+    do {
+      val size = currentClass.refInstanceFields.size
+      if (currentIndex < size) {
+        return currentClass.refInstanceFields[currentIndex]
+      }
+      currentIndex -= size
+      currentClass = currentClass.getSuperClass(classStore) ?: break
+    }
+    while (true)
+    if (currentIndex == 0) {
+      return CLASS_FIELD
+    }
+    throw IndexOutOfBoundsException("$index on class $name")
+  }
+
+  fun getClassFieldName(index: Int): String {
+    if (index in constantFields.indices) {
+      return "<constant>"
+    }
+    if (index in constantFields.size until constantFields.size + objectStaticFields.size) {
+      return objectStaticFields[index - constantFields.size].name
+    }
+    if (index == constantFields.size + objectStaticFields.size) {
+      return "<loader>"
+    }
+    throw IndexOutOfBoundsException("$index on class $name")
+  }
+
+  fun getPrimitiveStaticFieldValue(name: String): Long? {
+    return primitiveStaticFields.find { it.name == name }?.value
+  }
+
+  /**
+   * Computes offset of a given field in the class (including superclasses)
+   * @return Offset of the field, or -1 if the field doesn't exist.
+   */
+  fun computeOffsetOfField(fieldName: String, classStore: ClassStore): Int {
+    var classOffset = 0
+    var currentClass = this
+    do {
+      var field = currentClass.refInstanceFields.find { it.name == fieldName }
+      if (field == null) {
+        field = currentClass.primitiveInstanceFields.find { it.name == fieldName }
+      }
+      if (field != null) {
+        return classOffset + field.offset
+      }
+      classOffset += currentClass.superClassOffset
+      currentClass = currentClass.getSuperClass(classStore) ?: return -1
+    }
+    while (true)
+  }
+
   fun copyWithName(newName: String): ClassDefinition {
-    return ClassDefinition(newName, id, superClassId, instanceSize, superClassOffset, refInstanceFields, constantFields, staticFields)
+    return ClassDefinition(newName, id, superClassId, classLoaderId, instanceSize, superClassOffset, refInstanceFields, primitiveInstanceFields,
+                           constantFields, objectStaticFields, primitiveStaticFields)
   }
 }
 

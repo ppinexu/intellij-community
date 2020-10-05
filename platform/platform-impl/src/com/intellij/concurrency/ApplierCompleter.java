@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.concurrency;
 
 import com.intellij.openapi.application.ApplicationManager;
@@ -23,6 +9,7 @@ import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.util.Processor;
 import com.intellij.util.concurrency.AtomicFieldUpdater;
+import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -107,13 +94,14 @@ class ApplierCompleter<T> extends CountedCompleter<Void> {
         doComplete(throwable);
       }
     } : process;
-    ProgressIndicator existing = ProgressManager.getInstance().getProgressIndicator();
+    ProgressManager progressManager = ProgressManager.getInstance();
+    ProgressIndicator existing = progressManager.getProgressIndicator();
     if (existing == progressIndicator) {
       // we are already wrapped in an indicator - most probably because we came here from helper which steals children tasks
       toRun.run();
     }
     else {
-      ProgressManager.getInstance().executeProcessUnderProgress(toRun, progressIndicator);
+      progressManager.executeProcessUnderProgress(toRun, progressIndicator);
     }
   }
 
@@ -152,7 +140,18 @@ class ApplierCompleter<T> extends CountedCompleter<Void> {
 
       // traverse the list looking for a task available for stealing
       if (right != null) {
-        throwable = right.tryToExecAllList();
+        // tries to unfork, execute and re-link subtasks
+        ApplierCompleter<T> cur = right;
+        Throwable result = right.throwable;
+        while (cur != null) {
+          ProgressManager.checkCanceled();
+          if (cur.tryUnfork()) {
+            cur.execAndForkSubTasks();
+            result = moreImportant(result, cur.throwable);
+          }
+          cur = cur.next;
+        }
+        throwable = result;
       }
     }
     catch (Throwable e) {
@@ -198,7 +197,7 @@ class ApplierCompleter<T> extends CountedCompleter<Void> {
         //a.onExceptionalCompletion(throwable, child);
         child = a;
         //noinspection unchecked
-        a = (ApplierCompleter)a.getCompleter();
+        a = (ApplierCompleter<T>)a.getCompleter();
         if (a == null) {
           // currently avoid using completeExceptionally since it leaks exceptions via ForkJoinTask.exceptionTable
           child.quietlyComplete();
@@ -215,21 +214,6 @@ class ApplierCompleter<T> extends CountedCompleter<Void> {
     if (!progressIndicator.isCanceled()) {
       progressIndicator.cancel();
     }
-  }
-
-  // tries to unfork, execute and re-link subtasks
-  private Throwable tryToExecAllList() {
-    ApplierCompleter<T> right = this;
-    Throwable result = throwable;
-    while (right != null) {
-      ProgressManager.checkCanceled();
-      if (right.tryUnfork()) {
-        right.execAndForkSubTasks();
-        result = moreImportant(result, right.throwable);
-      }
-      right = right.next;
-    }
-    return result;
   }
 
   boolean completeTaskWhichFailToAcquireReadAction() {
@@ -252,6 +236,7 @@ class ApplierCompleter<T> extends CountedCompleter<Void> {
   }
 
   @Override
+  @NonNls
   public String toString() {
     return "("+lo+"-"+hi+")"+(getCompleter() == null ? "" : " parent: "+getCompleter());
   }

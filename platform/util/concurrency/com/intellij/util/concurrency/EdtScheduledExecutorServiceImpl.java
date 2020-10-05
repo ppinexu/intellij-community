@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.concurrency;
 
 import com.intellij.openapi.application.ModalityState;
@@ -6,6 +6,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -13,7 +14,7 @@ import java.util.concurrent.TimeUnit;
  * An {@link ExecutorService} implementation which
  * delegates tasks to the EDT for execution.
  */
-class EdtScheduledExecutorServiceImpl extends SchedulingWrapper implements EdtScheduledExecutorService {
+final class EdtScheduledExecutorServiceImpl extends SchedulingWrapper implements EdtScheduledExecutorService {
   private EdtScheduledExecutorServiceImpl() {
     super(EdtExecutorServiceImpl.INSTANCE, ((AppScheduledExecutorService)AppExecutorUtil.getAppScheduledExecutorService()).delayQueue);
   }
@@ -29,6 +30,13 @@ class EdtScheduledExecutorServiceImpl extends SchedulingWrapper implements EdtSc
       }
     };
     return delayedExecute(task);
+  }
+
+  @Override
+  void futureDone(@NotNull Future<?> task) {
+    if (EdtExecutorServiceImpl.shouldManifestExceptionsImmediately()) {
+      EdtExecutorServiceImpl.manifestExceptionsIn(task);
+    }
   }
 
   // stubs
@@ -60,5 +68,4 @@ class EdtScheduledExecutorServiceImpl extends SchedulingWrapper implements EdtSc
   }
 
   static final EdtScheduledExecutorService INSTANCE = new EdtScheduledExecutorServiceImpl();
-
 }

@@ -19,6 +19,7 @@ import com.intellij.util.Function;
 import com.intellij.util.containers.ContainerUtil;
 import org.gradle.tooling.model.DomainObjectSet;
 import org.gradle.tooling.model.idea.IdeaModule;
+import org.gradle.tooling.model.idea.IdeaProject;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.plugins.gradle.model.web.WebConfiguration;
 import org.junit.Test;
@@ -41,10 +42,15 @@ public class WebConfigurationBuilderImplTest extends AbstractModelBuilderTest {
 
   @Test
   public void testDefaultWarModel() {
-    DomainObjectSet<? extends IdeaModule> ideaModules = allModels.getIdeaProject().getModules();
+    DomainObjectSet<? extends IdeaModule> ideaModules = allModels.getModel(IdeaProject.class).getModules();
 
     List<WebConfiguration> ideaModule = ContainerUtil.mapNotNull(
-      ideaModules, (Function<IdeaModule, WebConfiguration>)module -> allModels.getModel(module, WebConfiguration.class));
+      ideaModules, new Function<IdeaModule, WebConfiguration>() {
+        @Override
+        public WebConfiguration fun(IdeaModule module) {
+          return allModels.getModel(module, WebConfiguration.class);
+        }
+      });
 
     assertEquals(1, ideaModule.size());
     WebConfiguration webConfiguration = ideaModule.get(0);
@@ -55,11 +61,16 @@ public class WebConfigurationBuilderImplTest extends AbstractModelBuilderTest {
 
     assertArrayEquals(
       new String[]{"MANIFEST.MF", "additionalWebInf", "rootContent"},
-      ContainerUtil.map2Array(warModel.getWebResources(), resource -> resource.getFile().getName()));
+      ContainerUtil.map2Array(warModel.getWebResources(), new Function<WebConfiguration.WebResource, Object>() {
+        @Override
+        public Object fun(WebConfiguration.WebResource resource) {
+          return resource.getFile().getName();
+        }
+      }));
   }
 
   @Override
-  protected Set<Class> getModels() {
-    return ContainerUtil.set(WebConfiguration.class);
+  protected Set<Class<?>> getModels() {
+    return ContainerUtil.<Class<?>>set(WebConfiguration.class);
   }
 }

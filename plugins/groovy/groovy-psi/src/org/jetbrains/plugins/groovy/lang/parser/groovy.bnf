@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 {
   generate = [
     psi = 'no'
@@ -109,6 +109,7 @@
     KW_CLASS = 'class'
     KW_CONTINUE = 'continue'
     KW_DEF = 'def'
+    KW_VAR = 'var'
     KW_DEFAULT = 'default'
     KW_DO = 'do'
     KW_ELSE = 'else'
@@ -234,6 +235,7 @@ private modifier ::= 'abstract'
                    | 'transient'
                    | 'volatile'
                    | def_modifier
+                   | var_modifier
 {
   consumeTokenMethod = 'consumeTokenFast'
 }
@@ -241,14 +243,21 @@ private modifier ::= 'abstract'
  * 'def' is a part of a reference if followed by a dot
  */
 private def_modifier ::= 'def' !'.' { consumeTokenMethod = 'consumeTokenFast' }
+
+/*
+ * 'var' could be modifier or identifier
+ */
+private var_modifier ::= 'var' &(weak_keyword | IDENTIFIER | modifier | type_element | tuple_var_declaration_tuple)  { consumeTokenMethod = 'consumeTokenFast' }
 // endregion
 
+private weak_keyword ::= 'var' | clear_variants_and_fail
 
 // region Annotations
 annotation ::= '@' annotation_reference after_annotation_reference
 {
   elementTypeClass = 'org.jetbrains.plugins.groovy.lang.psi.stubs.elements.GrAnnotationElementType'
   consumeTokenMethod = 'consumeTokenFast'
+  extraRoot = true
 }
 private annotation_reference ::= simple_reference { name = 'annotation reference' }
 private after_annotation_reference ::= mb_nl annotation_argument_list | empty_annotation_argument_list
@@ -262,8 +271,9 @@ annotation_member_value_pair ::= annotation_key '=' annotation_value | annotatio
   name = 'annotation attribute'
   pin('.*') = 2
   elementTypeClass = 'org.jetbrains.plugins.groovy.lang.psi.stubs.elements.GrNameValuePairElementType'
+  extraRoot = true
 }
-private annotation_key ::= IDENTIFIER | 'as' | 'def' | 'in'
+private annotation_key ::= weak_keyword | IDENTIFIER | 'as' | 'def' | 'in'
 private annotation_value ::= annotation | annotation_array_value | expression
 {
   name = 'annotation attribute initializer'
@@ -369,7 +379,7 @@ private declaration_type_element ::= definitely_type_element | clear_variants_an
 private definitely_type_element ::= <<definitelyTypeElement type_element declaration_lookahead>>
 
 private declaration_lookahead ::= method_lookahead | variable_lookahead
-private variable_lookahead ::= &IDENTIFIER
+private variable_lookahead ::= &(weak_keyword | IDENTIFIER)
 private method_lookahead ::= &(method_identifier '(')
 // endregion
 
@@ -447,7 +457,7 @@ annotation_method ::= method_identifier method_parameter_list [mb_nl annotation_
 }
 private annotation_method_default ::= 'default' annotation_value { pin = 1 }
 
-private method_identifier ::= IDENTIFIER | string_literal_tokens { consumeTokenMethod = 'consumeTokenFast' }
+private method_identifier ::= weak_keyword | IDENTIFIER | string_literal_tokens { consumeTokenMethod = 'consumeTokenFast' }
 private constructor_identifier ::= <<constructorIdentifier>>
 // endregion
 
@@ -570,12 +580,14 @@ constructor_block ::= '{' mb_separators [constructor_call_expression block_level
 {
   elementTypeClass = 'org.jetbrains.plugins.groovy.lang.parser.GrConstructorBlockElementType'
   pin = 1
+  extraRoot = true
 }
 lazy_block ::= <<parseBlockLazy open_block 'OPEN_BLOCK'>> { elementType = '' }
 open_block ::= '{' mb_separators block_levels '}'
 {
   elementTypeClass = 'org.jetbrains.plugins.groovy.lang.parser.GrBlockElementType'
   pin = 1
+  extraRoot = true
 }
 // endregion
 
@@ -643,7 +655,7 @@ private tuple_var_declaration_item ::= type_element tuple_variable | tuple_varia
 {
   elementType = variable
 }
-tuple_variable ::= IDENTIFIER
+tuple_variable ::= weak_keyword | IDENTIFIER
 {
   elementType = variable
 }
@@ -696,6 +708,9 @@ statement ::= if_statement
 private branch ::= <<extendedStatement>> | statement
 
 block_statement ::= !<<isParameterizedClosure>> lazy_block
+{
+  extraRoot = true
+}
 
 private expression_statement ::= expression_or_application_except_zero_params_closure
 
@@ -735,7 +750,7 @@ private parse_catch_parameter ::= <<parseTailLeftFlat catch_parameter_start catc
 private catch_parameter_start ::= modifier_list catch_parameter_type_element?
 private catch_parameter_type_element ::= type_element_followed_by_identifier
                                        | type_element disjunction_type_element
-catch_parameter ::= IDENTIFIER { elementType = parameter }
+catch_parameter ::= weak_keyword | IDENTIFIER { elementType = parameter }
 finally_clause ::= 'finally' (mb_nl lazy_block)
 {
   pin = 1
@@ -754,7 +769,7 @@ private for_header ::= '(' mb_nl for_clause mb_nl ')' { pin = 1 }
 private for_clause ::= for_in_clause | traditional_for_clause
 
 for_in_clause ::= for_in_parameter (':' | 'in') expression { consumeTokenMethod = 'consumeTokenFast' }
-for_in_parameter ::= modifier_list mb_type_element IDENTIFIER | clear_variants_and_fail { elementType = parameter }
+for_in_parameter ::= modifier_list mb_type_element (weak_keyword | IDENTIFIER) | clear_variants_and_fail { elementType = parameter }
 
 traditional_for_clause ::= empty for_clause_initialization? ';' expression? ';' mb_nl for_clause_update? { pin = 1 }
 private for_clause_initialization ::= for_variable_declaration | expression | clear_variants_and_fail
@@ -807,7 +822,8 @@ private assert_message_separator ::= ':' | ','
 
 
 // region Expressions
-private expression_start ::= IDENTIFIER
+private expression_start ::= weak_keyword
+                           | IDENTIFIER
                            | '!' | '(' | '+' | '++' | '-' | '--' | '[' | '~'
                            | 'this' | 'super'
                            | DOLLAR_SLASHY_BEGIN
@@ -848,7 +864,7 @@ private priority0 ::= unqualified_reference_expression
                     | gstring
                     | regex
                     | parenthesized_expression
-unqualified_reference_expression ::= IDENTIFIER soft_type_argument_list?
+unqualified_reference_expression ::= (weak_keyword | IDENTIFIER) soft_type_argument_list?
                                    | 'this'
                                    | 'super'
                                    | code_reference_identifiers_soft &(reference_dot | '.&')
@@ -863,7 +879,8 @@ private string_literal_as_reference ::= '('                                     
 {
   consumeTokenMethod = 'consumeTokenFast'
 }
-private application_argument_start ::= IDENTIFIER
+private application_argument_start ::= weak_keyword
+                                     | IDENTIFIER
                                      | simple_literal_tokens
                                      | GSTRING_BEGIN
                                      | primitive_type
@@ -943,11 +960,15 @@ private optional_expression ::= non_empty_annotation_list? '[' expression? ']' {
 
 private priority1_2 ::= method_call_expression | lazy_closure | lambda_expression | single_parameter_lambda_expression | list_or_map
 constructor_call_expression ::= &('this' | 'super') unqualified_reference_expression call_tail
-method_call_expression ::= expression call_tail
-private call_tail ::= call_argument_list (mb_nl lazy_closure)* | empty_argument_list <<closureArgumentSeparator lazy_closure+>>
+method_call_expression ::= expression (<<isParseNlBeforeClosure>> call_tail_with_nl_before_closure | call_tail)
+private call_tail ::= call_argument_list lazy_closure* | empty_argument_list lazy_closure+
+private call_tail_with_nl_before_closure ::= call_argument_list (mb_nl lazy_closure)* | empty_argument_list (mb_nl lazy_closure)+
 
 //region Lambda expression
 lambda_expression ::= !<<isClosureParameter>> lambda_expression_base | clear_variants_and_fail
+{
+  extraRoot = true
+}
 private lambda_expression_base ::= lambda_expression_head mb_nl lambda_body { pin = 1 }
 private lambda_expression_head ::= lambda_parameter_list mb_nl '->' { consumeTokenMethod = 'consumeTokenFast' }
 lambda_parameter_list ::= empty_parens | '(' <<comma_list (mb_nl parse_parameter)>> ')' { elementType = parameter_list }
@@ -960,7 +981,7 @@ private single_parameter_lambda_expression_base ::= single_parameter_lambda_expr
 private single_parameter_lambda_expression_head ::= single_parameter_lambda_parameter_list mb_nl '->' { consumeTokenMethod = 'consumeTokenFast' }
 
 single_parameter_lambda_parameter_list ::= !<<isApplicationArguments>> single_parameter_lambda_parameter { elementType = parameter_list }
-single_parameter_lambda_parameter ::= modifier_list IDENTIFIER {
+single_parameter_lambda_parameter ::= modifier_list (weak_keyword | IDENTIFIER) {
   elementType = parameter
 }
 private single_parameter_lambda_body ::= expression_single_parameter_lambda_body | lazy_block_lambda_body
@@ -976,6 +997,7 @@ lazy_block_lambda_body ::= <<parseBlockLazy block_lambda_body 'BLOCK_LAMBDA_BODY
 block_lambda_body ::= '{' mb_nl block_levels '}' {
   elementTypeClass = 'org.jetbrains.plugins.groovy.lang.parser.GrBlockLambdaBodyElementType'
   consumeTokenMethod = 'consumeTokenFast'
+  extraRoot = true
 }
 // endregion
 
@@ -989,6 +1011,7 @@ closure ::= '{' mb_nl closure_header mb_separators block_levels '}'
   elementTypeClass = 'org.jetbrains.plugins.groovy.lang.parser.GrClosureElementType'
   pin = 1
   consumeTokenMethod = 'consumeTokenFast'
+  extraRoot = true
 }
 private closure_header ::= closure_header_with_arrow | empty_parameter_list
 private closure_header_with_arrow ::= empty_parameter_list mb_nl closure_arrow | closure_parameter_list mb_nl closure_arrow
@@ -1021,7 +1044,7 @@ private attribute_dot ::= reference_dot mb_nl ('@') { consumeTokenMethod = 'fast
 private property_dot ::= attribute_dot | method_reference_dot | reference_dot
 
 private after_dot ::= <<mb_nl_group (type_argument_list? qualified_reference_expression_identifiers)>>
-private qualified_reference_expression_identifiers ::= IDENTIFIER
+private qualified_reference_expression_identifiers ::= weak_keyword | IDENTIFIER
                                                      | string_literal_tokens
                                                      | regex_literal
                                                      | modifier
@@ -1036,7 +1059,7 @@ private property_expression_identifiers ::= parenthesized_expression | lazy_bloc
 }
 
 private priority1_4 ::= not_expression | cast_expression
-not_expression ::= ('~' | '!') mb_nl expression { elementType = unary_expression }
+not_expression ::= ('~' | '!') mb_nl <<disableNlBeforeClosure>> expression { elementType = unary_expression }
 cast_expression ::= &cast_expression_start '(' <<annotated type_element>> ')' cast_operand
 private cast_expression_start ::= '(' non_empty_annotation_list? (IDENTIFIER | primitive_type) { consumeTokenMethod = 'consumeTokenFast' }
 private cast_operand ::= !empty_parens <<castOperandCheck>> priority1_4
@@ -1056,53 +1079,53 @@ postfix_unary_expression ::= expression ('++' | '--')
   elementType = unary_expression
 }
 
-power_expression ::= expression '**' mb_nl expression
+power_expression ::= expression '**' mb_nl <<disableNlBeforeClosure>> expression
 
-prefix_unary_expression ::= ('++' | '--' | '-' | '+') mb_nl expression
+prefix_unary_expression ::= ('++' | '--' | '-' | '+') mb_nl <<disableNlBeforeClosure>> expression
 {
   elementType = unary_expression
 }
 
-multiplicative_expression ::= expression mb_nl ('*' | '/' | '%') mb_nl expression
+multiplicative_expression ::= expression mb_nl ('*' | '/' | '%') mb_nl <<disableNlBeforeClosure>> expression
 
-additive_expression ::= expression ('+' | '-') mb_nl expression
+additive_expression ::= expression ('+' | '-') mb_nl <<disableNlBeforeClosure>> expression
 
 private shift_or_range ::= shift_expression | range_expression
-shift_expression ::= expression mb_nl shift_sign mb_nl expression
+shift_expression ::= expression mb_nl shift_sign mb_nl <<disableNlBeforeClosure>> expression
 private shift_sign ::= left_shift_sign | right_shift_unsigned_sign | right_shift_sign { consumeTokenMethod = 'consumeTokenFast' }
 left_shift_sign ::= '<' '<'
 right_shift_sign ::= '>' '>'
 right_shift_unsigned_sign ::= '>' '>' '>'
-range_expression ::= expression mb_nl ('..' | '..<') mb_nl expression
+range_expression ::= expression mb_nl ('..' | '..<') mb_nl <<disableNlBeforeClosure>> expression
 
 private priority7 ::= relational_expression | in_expression | instanceof_expression | as_expression
-relational_expression ::= expression mb_nl relational_operator mb_nl expression
+relational_expression ::= expression mb_nl relational_operator mb_nl <<disableNlBeforeClosure>> expression
 private relational_operator ::= '<' !'<' | '<=' | '>' !'>' | '>=' { consumeTokenMethod = 'consumeTokenFast' }
-in_expression ::= expression mb_nl mb_not ('in') mb_nl expression
+in_expression ::= expression mb_nl mb_not ('in') mb_nl <<disableNlBeforeClosure>> expression
 instanceof_expression ::= expression mb_nl instanceof_expression_tail
 private instanceof_expression_tail ::= mb_not ('instanceof') mb_nl (type_element | expect_type) { pin = 2 }
 as_expression ::= expression mb_nl ('as') mb_nl type_element
 
 private priority8 ::= equality_expression | compare_expression | regex_find_expression | regex_match_expression
-equality_expression ::= expression mb_nl <<equalityOperator>> mb_nl expression
-compare_expression ::= expression mb_nl ('<=>') mb_nl expression
+equality_expression ::= expression mb_nl <<equalityOperator>> mb_nl <<disableNlBeforeClosure>> expression
+compare_expression ::= expression mb_nl ('<=>') mb_nl <<disableNlBeforeClosure>> expression
 {
   elementType = relational_expression
 }
-regex_find_expression ::= expression mb_nl ('=~') mb_nl expression
-regex_match_expression ::= expression mb_nl ('==~') mb_nl expression
+regex_find_expression ::= expression mb_nl ('=~') mb_nl <<disableNlBeforeClosure>> expression
+regex_match_expression ::= expression mb_nl ('==~') mb_nl <<disableNlBeforeClosure>> expression
 
-band_expression ::= expression mb_nl ('&') mb_nl expression
-xor_expression ::= expression mb_nl ('^') mb_nl expression
-bor_expression ::= expression mb_nl ('|') mb_nl expression
-land_expression ::= expression mb_nl ('&&') mb_nl expression
-lor_expression ::= expression mb_nl ('||') mb_nl expression
+band_expression ::= expression mb_nl ('&') mb_nl <<disableNlBeforeClosure>> expression
+xor_expression ::= expression mb_nl ('^') mb_nl <<disableNlBeforeClosure>> expression
+bor_expression ::= expression mb_nl ('|') mb_nl <<disableNlBeforeClosure>> expression
+land_expression ::= expression mb_nl ('&&') mb_nl <<disableNlBeforeClosure>> expression
+lor_expression ::= expression mb_nl ('||') mb_nl <<disableNlBeforeClosure>> expression
 
 private conditionals ::= ternary_expression | elvis_expression
 ternary_expression ::= expression mb_nl (ternary_tail_pin | ternary_tail)
 private ternary_tail_pin ::= '?' mb_nl !'[' expression mb_nl ':' mb_nl conditionals { pin = 3 consumeTokenMethod = 'consumeTokenFast' }
 private ternary_tail ::= '?' mb_nl expression mb_nl ':' mb_nl conditionals { pin = 5 consumeTokenMethod = 'consumeTokenFast' }
-elvis_expression ::= expression mb_nl ('?:' mb_nl) expression
+elvis_expression ::= expression mb_nl ('?:' mb_nl) <<disableNlBeforeClosure>> expression
 {
   rightAssociative = true
 }
@@ -1126,12 +1149,12 @@ tuple ::= '(' unqualified_reference_expression (',' unqualified_reference_expres
 
 // region Applications
 expression_or_application ::= <<notApplicationArguments expression_or_application_inner>> { elementType = '' name = '' }
-private expression_or_application_inner ::= expression application*
+private expression_or_application_inner ::= <<enableNlBeforeClosure expression>> application*
 private application ::= no_nl <<parseApplication application_ref application_expression application_call application_index>>
 {
   extends = expression
 }
-left application_ref ::= IDENTIFIER | simple_literal_tokens
+left application_ref ::= weak_keyword | IDENTIFIER | simple_literal_tokens
 {
   elementType = reference_expression
   consumeTokenMethod = 'consumeTokenFast'
@@ -1204,6 +1227,9 @@ argument_label ::= IDENTIFIER | string_literal_tokens | primitive_type | modifie
 
 // region Type elements
 type_element ::= (primitive_type_element | class_type_element) array_type_elements
+{
+  extraRoot = true
+}
 
 primitive_type_element ::= primitive_type <<setTypeWasPrimitive>>
 external primitive_type ::= parsePrimitiveType
@@ -1235,6 +1261,9 @@ private any_type_element ::= <<anyTypeElement type_element>>
 
 // region Code references
 code_reference ::= code_reference_base
+{
+  extraRoot = true
+}
 private code_reference_base ::= short_code_reference code_reference_tail*
 qualified_code_reference ::= short_code_reference code_reference_tail code_reference_tail* { elementType = code_reference}
 short_code_reference ::= code_reference_part { elementType = code_reference }
@@ -1252,7 +1281,7 @@ private code_reference_dot ::= '.' !'*'
 private code_reference_part ::= code_reference_identifier [type_argument_list <<setRefHadTypeArguments>>]
 private code_reference_identifier ::= <<codeReferenceIdentifier code_reference_identifiers>>
 private code_reference_identifiers ::= IDENTIFIER | code_reference_identifiers_soft (<<isQualifiedName>> | &'.')
-private code_reference_identifiers_soft ::= 'def' | 'as' | 'in' | 'trait' { consumeTokenMethod = 'consumeTokenFast' }
+private code_reference_identifiers_soft ::= 'def' | 'as' | 'in' | 'trait' | 'var' { consumeTokenMethod = 'consumeTokenFast' }
 
 // for the sake of showing 'type expected' message
 type_code_reference ::= <<annotated code_reference_base>> { elementType = '' name = 'type' }
@@ -1266,7 +1295,7 @@ left doc_reference_tail ::= '.' code_reference_part { elementType = code_referen
 
 
 // region Variables
-private var ::= IDENTIFIER mb_initializer
+private var ::= (weak_keyword | IDENTIFIER) mb_initializer
 private mb_initializer ::= [mb_nl ('=') mb_nl expression_or_application]
 {
   pin('.*') = 2
@@ -1331,7 +1360,7 @@ private meta separated_recovery ::= !(<<item_end>> | <<element_start>>)
 // endregion
 
 
-// region Generated parser utils
+// region Generated parser util
 private external keyword ::= parseKeyword
 private clear_variants_and_fail ::= clear_variants fail
 private external clear_variants ::= clearVariants

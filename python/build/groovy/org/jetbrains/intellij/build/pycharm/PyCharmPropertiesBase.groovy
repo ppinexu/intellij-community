@@ -20,10 +20,7 @@ import org.jetbrains.intellij.build.*
 
 import static org.jetbrains.intellij.build.pycharm.PyCharmBuildOptions.GENERATE_INDICES_AND_STUBS_STEP
 
-/**
- * @author nik
- */
-abstract class PyCharmPropertiesBase extends ProductProperties {
+abstract class PyCharmPropertiesBase extends JetBrainsProductProperties {
   protected String dependenciesPath
 
   PyCharmPropertiesBase() {
@@ -41,7 +38,7 @@ abstract class PyCharmPropertiesBase extends ProductProperties {
       "intellij.java.compiler.antTasks",
       "intellij.platform.testFramework"
     ]
-    productLayout.buildAllCompatiblePlugins = true
+    productLayout.compatiblePluginsToIgnore.add("intellij.python.conda")
   }
 
   @Override
@@ -102,18 +99,21 @@ abstract class PyCharmPropertiesBase extends ProductProperties {
     CompilationTasks.create(context).compileModules(["intellij.python.tools"])
     List<String> buildClasspath = context.getModuleRuntimeClasspath(context.findModule("intellij.python.tools"), false)
 
+    File outputFile = File.createTempFile("GetPyStubsVersionKt_output", "txt")
     context.ant.java(classname: "com.jetbrains.python.tools.GetPyStubsVersionKt",
                      fork: true,
                      failonerror: !context.options.isInDevelopmentMode,
-                     outputproperty: "stubsVersion") {
+                     output: outputFile) {
       classpath {
         buildClasspath.each {
           pathelement(location: it)
         }
       }
     }
-    List<String> stubsVersion = (context.ant.project.properties.stubsVersion as String).split('\n')
-    return [stubsVersion[0].toInteger(), stubsVersion[1].toInteger()]
+
+    List<String> stubsVersion = outputFile.readLines().takeRight(2)
+    outputFile.deleteOnExit()
+    return [stubsVersion[0].trim().toInteger(), stubsVersion[1].trim().toInteger()]
   }
 
   protected void generateUniversalStubs(BuildContext context, File from, File to) {
@@ -201,5 +201,13 @@ abstract class PyCharmPropertiesBase extends ProductProperties {
     }
 
     folderWithUnzipContent.deleteDir()
+  }
+
+  static void downloadMiniconda(BuildContext context, String targetDirectory, String osName) {
+    final String installer = "Miniconda3-latest-$osName-x86_64.${if (osName == "Windows") "exe" else "sh"}"
+
+    context.ant.mkdir(dir: "$targetDirectory/$PyCharmBuildOptions.minicondaInstallerFolderName")
+    context.ant.get(src: "https://repo.continuum.io/miniconda/$installer",
+                    dest: "$targetDirectory/$PyCharmBuildOptions.minicondaInstallerFolderName")
   }
 }

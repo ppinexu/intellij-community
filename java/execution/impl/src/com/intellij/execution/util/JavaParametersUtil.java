@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.util;
 
 import com.intellij.execution.CantRunException;
@@ -18,7 +18,6 @@ import com.intellij.openapi.projectRoots.ProjectJdkTable;
 import com.intellij.openapi.projectRoots.Sdk;
 import com.intellij.openapi.projectRoots.ex.PathUtilEx;
 import com.intellij.openapi.roots.*;
-import com.intellij.openapi.util.DefaultJDOMExternalizer;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiClass;
@@ -31,11 +30,9 @@ import org.jetbrains.annotations.Nullable;
 import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 
-/**
- * @author lex
- */
-public class JavaParametersUtil {
+public final class JavaParametersUtil {
   private JavaParametersUtil() { }
 
   public static void configureConfiguration(SimpleJavaParameters parameters, CommonJavaRunConfigurationParameters configuration) {
@@ -56,10 +53,9 @@ public class JavaParametersUtil {
       for (Map.Entry<String, String> each : parameters.getEnv().entrySet()) {
         vmParameters = StringUtil.replace(vmParameters, "$" + each.getKey() + "$", each.getValue(), false); //replace env usages
       }
-      vmParameters = ProgramParametersConfigurator.expandMacros(vmParameters);
+      List<String> vmParametersList = ProgramParametersConfigurator.expandMacrosAndParseParameters(vmParameters);
+      parameters.getVMParametersList().addAll(vmParametersList);
     }
-
-    parameters.getVMParametersList().addParametersString(vmParameters);
   }
 
   @MagicConstant(valuesFromClass = JavaParameters.class)
@@ -179,19 +175,15 @@ public class JavaParametersUtil {
     }
   }
 
-  @SuppressWarnings("deprecation")
   @NotNull
-  public static DefaultJDOMExternalizer.JDOMFilter getFilter(@NotNull CommonJavaRunConfigurationParameters parameters) {
-    return new DefaultJDOMExternalizer.JDOMFilter() {
-      @Override
-      public boolean isAccept(@NotNull Field field) {
-        String name = field.getName();
-        if ((name.equals("ALTERNATIVE_JRE_PATH_ENABLED") && !parameters.isAlternativeJrePathEnabled()) ||
-            (name.equals("ALTERNATIVE_JRE_PATH") && StringUtil.isEmpty(parameters.getAlternativeJrePath()))) {
-          return false;
-        }
-        return true;
+  public static Predicate<Field> getFilter(@NotNull CommonJavaRunConfigurationParameters parameters) {
+    return field -> {
+      String name = field.getName();
+      if ((name.equals("ALTERNATIVE_JRE_PATH_ENABLED") && !parameters.isAlternativeJrePathEnabled()) ||
+          (name.equals("ALTERNATIVE_JRE_PATH") && StringUtil.isEmpty(parameters.getAlternativeJrePath()))) {
+        return false;
       }
+      return true;
     };
   }
 }

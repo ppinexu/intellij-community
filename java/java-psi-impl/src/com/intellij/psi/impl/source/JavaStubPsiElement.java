@@ -1,8 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
-
-/*
- * @author max
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.impl.source;
 
 import com.intellij.extapi.psi.StubBasedPsiElementBase;
@@ -26,7 +22,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public abstract class JavaStubPsiElement<T extends StubElement> extends StubBasedPsiElementBase<T> implements StubBasedPsiElement<T> {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.psi.impl.source.JavaStubPsiElement");
+  private static final Logger LOG = Logger.getInstance(JavaStubPsiElement.class);
 
   public JavaStubPsiElement(@NotNull T stub, @NotNull IStubElementType nodeType) {
     super(stub, nodeType);
@@ -138,8 +134,7 @@ public abstract class JavaStubPsiElement<T extends StubElement> extends StubBase
   }
 
   @Override
-  @NotNull
-  public PsiElement[] getChildren() {
+  public PsiElement @NotNull [] getChildren() {
     PsiElement psiChild = getFirstChild();
     if (psiChild == null) return EMPTY_ARRAY;
 
@@ -158,5 +153,5 @@ public abstract class JavaStubPsiElement<T extends StubElement> extends StubBase
     }
 
     return answer;
-  }  
+  }
 }

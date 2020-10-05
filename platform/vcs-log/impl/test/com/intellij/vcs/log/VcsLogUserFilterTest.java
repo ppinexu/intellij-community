@@ -1,10 +1,11 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.vcs.log;
 
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vfs.VfsUtil;
+import com.intellij.testFramework.PlatformTestUtil;
 import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.MultiMap;
@@ -183,6 +184,25 @@ public abstract class VcsLogUserFilterTest {
     assertFilteredCorrectly(builder);
   }
 
+  /*
+  Test for IDEA-225553
+   */
+  public void testNameAtSurnameEmails() throws Exception {
+    VcsUser petrov = myObjectsFactory.createUser("Ivan Petrov", "ivan@petrov.com");
+    VcsUser sidorov = myObjectsFactory.createUser("Ivan Sidorov", "ivan@sidorov.com");
+    List<VcsUser> users = Arrays.asList(petrov, sidorov);
+
+    MultiMap<VcsUser, String> commits = generateHistory(users);
+    List<VcsCommitMetadata> metadata = generateMetadata(commits);
+    VcsLogUserFilter filter = VcsLogFilterObject.fromUserNames(singleton(VcsLogFilterObject.ME),
+                                                               singletonMap(PlatformTestUtil.getOrCreateProjectBaseDir(myProject), petrov),
+                                                               new HashSet<>(users));
+
+    StringBuilder builder = new StringBuilder();
+    checkFilter(filter, "me", commits.get(petrov), metadata, builder);
+    assertFilteredCorrectly(builder);
+  }
+
   private void checkFilterForUser(@NotNull VcsUser user,
                                   @NotNull Set<? extends VcsUser> allUsers,
                                   @NotNull Collection<String> expectedHashes,
@@ -218,7 +238,7 @@ public abstract class VcsLogUserFilterTest {
   @NotNull
   private List<String> getFilteredHashes(@NotNull VcsLogUserFilter filter) throws VcsException {
     VcsLogFilterCollection filters = VcsLogFilterObject.collection(filter);
-    List<TimedVcsCommit> commits = myLogProvider.getCommitsMatchingFilter(myProject.getBaseDir(), filters, -1);
+    List<TimedVcsCommit> commits = myLogProvider.getCommitsMatchingFilter(PlatformTestUtil.getOrCreateProjectBaseDir(myProject), filters, -1);
     return ContainerUtil.map(commits, commit -> commit.getId().asString());
   }
 
@@ -234,7 +254,7 @@ public abstract class VcsLogUserFilterTest {
     for (VcsUser user : commits.keySet()) {
       for (String commit : commits.get(user)) {
         result.add(myObjectsFactory.createCommitMetadata(HashImpl.build(commit), emptyList(), System.currentTimeMillis(),
-                                                         myProject.getBaseDir(), "subject " + Math.random(), user.getName(),
+                                                         PlatformTestUtil.getOrCreateProjectBaseDir(myProject), "subject " + Math.random(), user.getName(),
                                                          user.getEmail(), "message " + Math.random(), user.getName(), user.getEmail(),
                                                          System.currentTimeMillis()));
       }
@@ -263,12 +283,12 @@ public abstract class VcsLogUserFilterTest {
       recordCommit(commits, user);
     }
 
-    VfsUtil.markDirtyAndRefresh(false, true, false, myProject.getBaseDir());
+    VfsUtil.markDirtyAndRefresh(false, true, false, PlatformTestUtil.getOrCreateProjectBaseDir(myProject));
     return commits;
   }
 
   private static void assertFilteredCorrectly(@NotNull StringBuilder builder) {
-    TestCase.assertTrue("Incorrectly filtered log for\n" + builder.toString(), builder.toString().isEmpty());
+    TestCase.assertTrue("Incorrectly filtered log for\n" + builder, builder.toString().isEmpty());
   }
 
   private void recordCommit(@NotNull MultiMap<VcsUser, String> commits, @NotNull VcsUser user) throws IOException {

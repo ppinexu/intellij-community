@@ -19,6 +19,7 @@ import com.intellij.openapi.Disposable;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.util.ExceptionUtil;
 import com.intellij.util.containers.FixedHashMap;
+import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
@@ -30,7 +31,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @author peter
  */
 public class FrequentEventDetector {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.openapi.diagnostic.FrequentEventDetector");
+  private static final Logger LOG = Logger.getInstance(FrequentEventDetector.class);
 
   public enum Level {INFO, WARN, ERROR}
 
@@ -79,7 +80,7 @@ public class FrequentEventDetector {
   }
 
   @NotNull
-  private String generateMessage(@NotNull Object event) {
+  private @NonNls String generateMessage(@NotNull Object event) {
     String trace = ExceptionUtil.getThrowableText(new Throwable());
     boolean logTrace;
     int traceId;

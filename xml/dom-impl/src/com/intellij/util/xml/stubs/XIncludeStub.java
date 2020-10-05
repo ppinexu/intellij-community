@@ -1,7 +1,8 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.xml.stubs;
 
 import com.intellij.openapi.fileTypes.PlainTextLanguage;
+import com.intellij.openapi.util.JDOMUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.PsiFileFactory;
 import com.intellij.psi.PsiFileSystemItem;
@@ -19,7 +20,6 @@ import com.intellij.util.xml.DomElement;
 import com.intellij.util.xml.XmlName;
 import com.intellij.util.xml.impl.DomFileElementImpl;
 import com.intellij.util.xml.impl.DomInvocationHandler;
-import com.intellij.util.xmlb.JDOMXIncluder;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -28,8 +28,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.regex.Matcher;
 
-public class XIncludeStub extends ObjectStubBase<ElementStub> {
-
+public final class XIncludeStub extends ObjectStubBase<ElementStub> {
   private final String myHref;
   private final String myXpointer;
   private volatile CachedValue<DomElement> myCachedValue;
@@ -48,7 +47,7 @@ public class XIncludeStub extends ObjectStubBase<ElementStub> {
   }
 
   @Override
-  public ObjectStubSerializer<?, ?> getStubType() {
+  public ObjectStubSerializer<?, Stub> getStubType() {
     return DomElementTypeHolder.XIncludeStub;
   }
 
@@ -68,7 +67,7 @@ public class XIncludeStub extends ObjectStubBase<ElementStub> {
     }
   }
 
-  private static void processChildrenWithLocalName(DomElement parent, String localName, Processor<DomElement> processor) {
+  private static void processChildrenWithLocalName(DomElement parent, String localName, Processor<? super DomElement> processor) {
     parent.acceptChildren(element -> {
       if (element.getXmlElementName().equals(localName)) {
         processor.process(element);
@@ -81,12 +80,12 @@ public class XIncludeStub extends ObjectStubBase<ElementStub> {
     if (StringUtil.isEmpty(myHref) || StringUtil.isEmpty(myXpointer)) {
       return null;
     }
-    Matcher matcher = JDOMXIncluder.XPOINTER_PATTERN.matcher(myXpointer);
+    Matcher matcher = JDOMUtil.XPOINTER_PATTERN.matcher(myXpointer);
     if (!matcher.matches()) {
       return null;
     }
     String group = matcher.group(1);
-    matcher = JDOMXIncluder.CHILDREN_PATTERN.matcher(group);
+    matcher = JDOMUtil.CHILDREN_PATTERN.matcher(group);
     if (!matcher.matches()) {
       return null;
     }

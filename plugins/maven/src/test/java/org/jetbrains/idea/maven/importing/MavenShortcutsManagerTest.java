@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.maven.importing;
 
 import com.intellij.openapi.actionSystem.ActionManager;
@@ -14,7 +14,6 @@ import org.jetbrains.idea.maven.tasks.MavenKeymapExtension;
 import org.jetbrains.idea.maven.tasks.MavenShortcutsManager;
 
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -160,7 +159,8 @@ public class MavenShortcutsManagerTest extends MavenImportingTestCase {
                      "<modules>" +
                      "  <module>module</module>" +
                      "</modules>");
-    waitForReadingCompletion();
+
+    importProject();
 
     assertEmptyKeymap();
     assignShortcut(m, goal, "alt shift X");
@@ -188,7 +188,8 @@ public class MavenShortcutsManagerTest extends MavenImportingTestCase {
 
     WriteCommandAction.writeCommandAction(myProject).run(() -> p1.delete(this));
 
-    waitForReadingCompletion();
+    configConfirmationForYesAnswer();
+    importProjects(p1, p2);
 
     assertKeymapDoesNotContain(p1, goal);
     assertKeymapContains(p2, goal);
@@ -213,6 +214,7 @@ public class MavenShortcutsManagerTest extends MavenImportingTestCase {
     assertKeymapContains(p2, goal);
 
     myProjectsManager.setIgnoredState(Collections.singletonList(myProjectsManager.findProject(p1)), true);
+
 
     assertKeymapDoesNotContain(p1, goal);
     assertKeymapContains(p2, goal);
@@ -252,6 +254,6 @@ public class MavenShortcutsManagerTest extends MavenImportingTestCase {
 
   private List<String> getProjectActions() {
     String prefix = MavenKeymapExtension.getActionPrefix(myProject, null);
-    return Arrays.asList(ActionManager.getInstance().getActionIds(prefix));
+    return ActionManager.getInstance().getActionIdList(prefix);
   }
 }

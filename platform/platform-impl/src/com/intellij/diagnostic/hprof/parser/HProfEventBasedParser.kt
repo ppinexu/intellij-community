@@ -15,10 +15,10 @@
  */
 package com.intellij.diagnostic.hprof.parser
 
+import com.google.common.base.Stopwatch
 import com.intellij.diagnostic.hprof.util.HProfReadBuffer
 import com.intellij.diagnostic.hprof.util.HProfReadBufferSlidingWindow
-import com.google.common.base.Stopwatch
-import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.diagnostic.logger
 import java.io.EOFException
 import java.io.IOException
 import java.nio.channels.FileChannel
@@ -27,7 +27,7 @@ import java.util.function.LongUnaryOperator
 
 class HProfEventBasedParser(fileChannel: FileChannel) : AutoCloseable {
   companion object {
-    private val LOG = Logger.getInstance(HProfEventBasedParser::class.java)
+    private val LOG = logger<HProfEventBasedParser>()
   }
 
   var idSize: Int = 0
@@ -35,7 +35,7 @@ class HProfEventBasedParser(fileChannel: FileChannel) : AutoCloseable {
 
   private var reparsePosition: Long = 0
   private var remapFunction: LongUnaryOperator? = null
-  private val buffer: HProfReadBuffer
+  val buffer: HProfReadBuffer
 
   private var heapRecordPosition: Long = 0
 
@@ -103,12 +103,16 @@ class HProfEventBasedParser(fileChannel: FileChannel) : AutoCloseable {
         }
         RecordType.EndThread -> visitor.visitEndThread(readUnsignedInt())
         RecordType.StackFrame -> {
-          visitor.visitStackFrame()
-          skip(length)
+          visitor.visitStackFrame(readRawId(), readRawId(), readRawId(), readRawId(), readUnsignedInt(), readInt())
         }
         RecordType.StackTrace -> {
-          visitor.visitStackTrace()
-          skip(length)
+          val stackTraceSerialNumber = readUnsignedInt()
+          val threadSerialNumber = readUnsignedInt()
+          val numberOfFrames = readInt()
+          val frameIds = LongArray(numberOfFrames) {
+            readRawId()
+          }
+          visitor.visitStackTrace(stackTraceSerialNumber, threadSerialNumber, numberOfFrames, frameIds)
         }
         RecordType.CPUSamples -> {
           visitor.visitCPUSamples()
@@ -152,7 +156,7 @@ class HProfEventBasedParser(fileChannel: FileChannel) : AutoCloseable {
     }
   }
 
-  private fun acceptHeapDumpRecord(heapDumpRecordType: HeapDumpRecordType, visitor: HProfVisitor) {
+  fun acceptHeapDumpRecord(heapDumpRecordType: HeapDumpRecordType, visitor: HProfVisitor) {
     when (heapDumpRecordType) {
       HeapDumpRecordType.RootUnknown -> visitor.visitRootUnknown(readId())
       HeapDumpRecordType.RootGlobalJNI -> visitor.visitRootGlobalJNI(readId(), readRawId())
@@ -254,12 +258,13 @@ class HProfEventBasedParser(fileChannel: FileChannel) : AutoCloseable {
     val numberOfElements = readUnsignedInt()
     val elementTypeId = readUnsignedByte()
     val elementType = Type.getType(elementTypeId)
-    skip(numberOfElements * elementType.size)
+    val primitiveArrayData = buffer.getByteBuffer((numberOfElements * elementType.size).toInt())
     visitor.visitPrimitiveArrayDump(
       arrayObjectId,
       stackTraceSerialNumber,
       numberOfElements,
-      elementType
+      elementType,
+      primitiveArrayData
     )
   }
 

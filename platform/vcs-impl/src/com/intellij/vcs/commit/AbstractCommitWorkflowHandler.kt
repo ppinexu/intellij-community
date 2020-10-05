@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.vcs.commit
 
 import com.intellij.openapi.Disposable
@@ -6,7 +6,10 @@ import com.intellij.openapi.actionSystem.DataProvider
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.ui.InputException
-import com.intellij.openapi.vcs.*
+import com.intellij.openapi.vcs.AbstractVcs
+import com.intellij.openapi.vcs.CheckinProjectPanel
+import com.intellij.openapi.vcs.FilePath
+import com.intellij.openapi.vcs.VcsBundle
 import com.intellij.openapi.vcs.VcsDataKeys.COMMIT_WORKFLOW_HANDLER
 import com.intellij.openapi.vcs.changes.*
 import com.intellij.openapi.vcs.changes.ChangesUtil.getFilePath
@@ -17,7 +20,6 @@ import com.intellij.util.containers.forEachLoggingErrors
 import com.intellij.util.containers.mapNotNullLoggingErrors
 import com.intellij.util.ui.UIUtil.replaceMnemonicAmpersand
 import com.intellij.vcs.commit.AbstractCommitWorkflow.Companion.getCommitHandlers
-import com.intellij.vcsUtil.VcsUtil.getFilePath
 import org.jetbrains.annotations.ApiStatus
 
 private val LOG = logger<AbstractCommitWorkflowHandler<*, *>>()
@@ -33,10 +35,10 @@ internal fun getDefaultCommitActionName(vcses: Collection<AbstractVcs> = emptyLi
   )
 
 internal fun CommitWorkflowUi.getDisplayedPaths(): List<FilePath> =
-  getDisplayedChanges().map { getFilePath(it) } + getDisplayedUnversionedFiles().map { getFilePath(it) }
+  getDisplayedChanges().map { getFilePath(it) } + getDisplayedUnversionedFiles()
 
 internal fun CommitWorkflowUi.getIncludedPaths(): List<FilePath> =
-  getIncludedChanges().map { getFilePath(it) } + getIncludedUnversionedFiles().map { getFilePath(it) }
+  getIncludedChanges().map { getFilePath(it) } + getIncludedUnversionedFiles()
 
 @get:ApiStatus.Internal
 val CheckinProjectPanel.isNonModalCommit: Boolean
@@ -55,7 +57,6 @@ abstract class AbstractCommitWorkflowHandler<W : AbstractCommitWorkflow, U : Com
   abstract val ui: U
 
   protected val project get() = workflow.project
-  private val vcsConfiguration get() = VcsConfiguration.getInstance(project)
 
   protected abstract val commitPanel: CheckinProjectPanel
 
@@ -92,8 +93,7 @@ abstract class AbstractCommitWorkflowHandler<W : AbstractCommitWorkflow, U : Com
   override fun inclusionChanged() = commitHandlers.forEachLoggingErrors(LOG) { it.includedChangesChanged() }
 
   override fun getExecutor(executorId: String): CommitExecutor? = workflow.commitExecutors.find { it.id == executorId }
-  override fun isExecutorEnabled(executor: CommitExecutor): Boolean =
-    executor in workflow.commitExecutors && (!isCommitEmpty() || (executor is CommitExecutorBase && !executor.areChangesRequired()))
+  override fun isExecutorEnabled(executor: CommitExecutor): Boolean = executor in workflow.commitExecutors
 
   override fun execute(executor: CommitExecutor) = executorCalled(executor)
   override fun executorCalled(executor: CommitExecutor?) =
@@ -111,8 +111,8 @@ abstract class AbstractCommitWorkflowHandler<W : AbstractCommitWorkflow, U : Com
   override fun beforeCommitChecksEnded(isDefaultCommit: Boolean, result: CheckinHandler.ReturnResult) = ui.endBeforeCommitChecks(result)
 
   private fun executeDefault(executor: CommitExecutor?): Boolean =
+    checkCommit(executor) &&
     addUnversionedFiles() &&
-    checkEmptyCommitMessage() &&
     saveCommitOptions() &&
     run {
       saveCommitMessage(true)
@@ -126,8 +126,8 @@ abstract class AbstractCommitWorkflowHandler<W : AbstractCommitWorkflow, U : Com
     }
 
   private fun executeCustom(executor: CommitExecutor, session: CommitSession): Boolean =
+    checkCommit(executor) &&
     canExecute(executor) &&
-    checkEmptyCommitMessage() &&
     saveCommitOptions() &&
     run {
       saveCommitMessage(true)
@@ -142,10 +142,14 @@ abstract class AbstractCommitWorkflowHandler<W : AbstractCommitWorkflow, U : Com
 
   protected open fun updateWorkflow() = Unit
 
+  protected abstract fun checkCommit(executor: CommitExecutor?): Boolean
+
   protected abstract fun addUnversionedFiles(): Boolean
 
   protected fun addUnversionedFiles(changeList: LocalChangeList): Boolean =
-    workflow.addUnversionedFiles(changeList, getIncludedUnversionedFiles()) { changes -> ui.includeIntoCommit(changes) }
+    workflow.addUnversionedFiles(changeList, getIncludedUnversionedFiles().mapNotNull { it.virtualFile }) { changes ->
+      ui.includeIntoCommit(changes)
+    }
 
   private fun doExecuteDefault(executor: CommitExecutor?): Boolean = try {
     workflow.executeDefault(executor)
@@ -157,9 +161,6 @@ abstract class AbstractCommitWorkflowHandler<W : AbstractCommitWorkflow, U : Com
 
   private fun canExecute(executor: CommitExecutor): Boolean = workflow.canExecute(executor, getIncludedChanges())
   private fun doExecuteCustom(executor: CommitExecutor, session: CommitSession): Boolean = workflow.executeCustom(executor, session)
-
-  private fun checkEmptyCommitMessage(): Boolean =
-    getCommitMessage().isNotEmpty() || !vcsConfiguration.FORCE_NON_EMPTY_COMMENT || ui.confirmCommitWithEmptyMessage()
 
   protected open fun saveCommitOptions() = try {
     commitOptions.saveState()
@@ -190,7 +191,7 @@ abstract class AbstractCommitWorkflowHandler<W : AbstractCommitWorkflow, U : Com
         ui.refreshData()
         callback()
       },
-      InvokeAfterUpdateMode.SYNCHRONOUS_CANCELLABLE, "Commit", ModalityState.current()
+      InvokeAfterUpdateMode.SYNCHRONOUS_CANCELLABLE, VcsBundle.message("commit.progress.title"), ModalityState.current()
     )
 
   override fun dispose() = Unit

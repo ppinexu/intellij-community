@@ -1,10 +1,11 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.jps.maven.compiler;
 
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.io.FileUtilRt;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -34,9 +35,6 @@ import static com.intellij.openapi.util.io.FileUtil.toSystemIndependentName;
 import static com.intellij.openapi.util.text.StringUtil.trimEnd;
 import static com.intellij.openapi.util.text.StringUtil.trimStart;
 
-/**
- * @author nik
- */
 public class MavenWebArtifactRootCopyingHandlerProvider extends ArtifactRootCopyingHandlerProvider {
   private static final Logger LOG = Logger.getInstance(MavenWebArtifactRootCopyingHandlerProvider.class);
 
@@ -170,7 +168,7 @@ public class MavenWebArtifactRootCopyingHandlerProvider extends ArtifactRootCopy
     private static List<ResourceRootConfiguration> getWebResources(@NotNull File targetDir,
                                                                    @NotNull MavenWebArtifactConfiguration artifactConfig) {
       String webInfClassesPath = toSystemIndependentName(new File(targetDir, "WEB-INF" + File.separator + "classes").getPath());
-      List<ResourceRootConfiguration> result = ContainerUtil.newSmartList();
+      List<ResourceRootConfiguration> result = new SmartList<>();
       for (ResourceRootConfiguration webResource : artifactConfig.webResources) {
         if (!webResource.isFiltered) continue;
 
@@ -231,7 +229,7 @@ public class MavenWebArtifactRootCopyingHandlerProvider extends ArtifactRootCopy
     }
   }
 
-  private static class MavenWebRootCopyingHandler extends MavenWebArtifactCopyingHandler {
+  private static final class MavenWebRootCopyingHandler extends MavenWebArtifactCopyingHandler {
     private final MavenResourceFileProcessor myFileProcessor;
     @NotNull private final ResourceRootConfiguration myRootConfiguration;
     private final FileFilter myFilteringFilter;

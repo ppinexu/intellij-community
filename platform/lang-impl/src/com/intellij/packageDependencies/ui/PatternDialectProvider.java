@@ -7,8 +7,10 @@ import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.openapi.module.ModuleGrouperKt;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Comparing;
+import com.intellij.openapi.util.NlsActions;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.search.scope.packageSet.PackageSet;
+import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -31,8 +33,10 @@ public abstract class PatternDialectProvider {
   public abstract TreeModel createTreeModel(Project project, Set<? extends PsiFile> deps, Marker marker,
                                             final DependenciesPanel.DependencyPanelSettings settings);
 
-  public abstract String getDisplayName();
+  @Contract(pure = true)
+  public abstract @NlsActions.ActionText String getDisplayName();
 
+  @Contract(pure = true)
   @NonNls @NotNull
   public abstract String getShortName();
 

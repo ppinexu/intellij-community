@@ -39,7 +39,7 @@ import java.util.List;
  * @author yole
  */
 public class MorphAction extends AbstractGuiEditorAction {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.uiDesigner.actions.MorphAction");
+  private static final Logger LOG = Logger.getInstance(MorphAction.class);
 
   private final ComponentItem myLastMorphComponent = null;
 
@@ -72,7 +72,8 @@ public class MorphAction extends AbstractGuiEditorAction {
   }
 
   private static boolean morphComponent(final GuiEditor editor, final RadComponent oldComponent, ComponentItem targetItem) {
-    targetItem = InsertComponentProcessor.replaceAnyComponentItem(editor, targetItem, "Morph to Non-Palette Component");
+    targetItem =
+      InsertComponentProcessor.replaceAnyComponentItem(editor, targetItem, UIDesignerBundle.message("morph.non.palette.component"));
     if (targetItem == null) {
       return false;
     }

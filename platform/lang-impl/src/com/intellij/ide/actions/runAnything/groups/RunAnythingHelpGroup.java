@@ -5,10 +5,12 @@ import com.intellij.ide.actions.runAnything.activity.RunAnythingProvider;
 import com.intellij.ide.actions.runAnything.items.RunAnythingItem;
 import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.extensions.ExtensionPointName;
+import com.intellij.openapi.util.NlsContexts;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -21,10 +23,10 @@ import java.util.stream.Collectors;
 public class RunAnythingHelpGroup<P extends RunAnythingProvider> extends RunAnythingGroupBase {
   public static final ExtensionPointName<RunAnythingGroup> EP_NAME = ExtensionPointName.create("com.intellij.runAnything.helpGroup");
 
-  @NotNull private String myTitle = "undefined";
+  @NotNull @NlsContexts.PopupTitle private String myTitle = "undefined"; //NON-NLS
   @NotNull private List<P> myProviders = ContainerUtil.emptyList();
 
-  public RunAnythingHelpGroup(@NotNull String title, @NotNull List<P> providers) {
+  public RunAnythingHelpGroup(@NotNull @NlsContexts.PopupTitle String title, @NotNull List<P> providers) {
     myTitle = title;
     myProviders = providers;
   }
@@ -59,6 +61,7 @@ public class RunAnythingHelpGroup<P extends RunAnythingProvider> extends RunAnyt
       .stream()
       .map(provider -> provider.getHelpItem(dataContext))
       .filter(Objects::nonNull)
+      .sorted(Comparator.comparing(RunAnythingItem::getCommand))
       .collect(Collectors.toList());
   }
 

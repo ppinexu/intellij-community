@@ -6,7 +6,7 @@ import com.intellij.util.execution.ParametersListUtil
 import org.jetbrains.annotations.ApiStatus
 
 @ApiStatus.Internal
-abstract class RunAnythingCommandLineProvider : RunAnythingProviderWithVisibleExecutionFail<String>() {
+abstract class RunAnythingCommandLineProvider : RunAnythingNotifiableProvider<String>() {
 
   open fun getHelpCommandAliases(): List<String> = emptyList()
 
@@ -14,14 +14,14 @@ abstract class RunAnythingCommandLineProvider : RunAnythingProviderWithVisibleEx
 
   protected abstract fun suggestCompletionVariants(dataContext: DataContext, commandLine: CommandLine): Sequence<String>
 
-  protected abstract fun runAnything(dataContext: DataContext, commandLine: CommandLine): Boolean
+  protected abstract fun run(dataContext: DataContext, commandLine: CommandLine): Boolean
 
   override fun getCommand(value: String) = value
 
   private fun getHelpCommands() = listOf(helpCommand) + getHelpCommandAliases()
 
   override fun findMatchingValue(dataContext: DataContext, pattern: String) =
-    if (getHelpCommands().any { pattern.startsWith(it) }) getCommand(pattern) else null
+    if (extractLeadingHelpPrefix(pattern) != null) getCommand(pattern) else null
 
   private fun extractLeadingHelpPrefix(commandLine: String): Pair<String, String>? {
     for (helpCommand in getHelpCommands()) {
@@ -52,9 +52,9 @@ abstract class RunAnythingCommandLineProvider : RunAnythingProviderWithVisibleEx
     return variants.map { "$prefix $it" }.toList()
   }
 
-  override fun runAnything(dataContext: DataContext, value: String): Boolean {
+  override fun run(dataContext: DataContext, value: String): Boolean {
     val commandLine = parseCommandLine(value) ?: return false
-    return runAnything(dataContext, commandLine)
+    return run(dataContext, commandLine)
   }
 
   class CommandLine(

@@ -19,27 +19,23 @@ import com.intellij.vcs.log.*;
 import com.intellij.vcs.log.data.VcsLogData;
 import com.intellij.vcs.log.util.VcsUserUtil;
 import com.intellij.vcs.log.visible.filters.VcsLogFilterObject;
-import com.intellij.vcs.log.visible.filters.VcsLogUserFilterImpl;
 import gnu.trove.THashSet;
+import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.Collection;
 import java.util.Collections;
 
 public class MyCommitsHighlighter implements VcsLogHighlighter {
   @NotNull private final VcsLogData myLogData;
-  @NotNull private final VcsLogUi myLogUi;
   private boolean myShouldHighlightUser = false;
 
-  public MyCommitsHighlighter(@NotNull VcsLogData logData, @NotNull VcsLogUi logUi) {
+  public MyCommitsHighlighter(@NotNull VcsLogData logData) {
     myLogData = logData;
-    myLogUi = logUi;
   }
 
   @NotNull
   @Override
   public VcsCommitStyle getStyle(int commitId, @NotNull VcsShortCommitDetails details, boolean isSelected) {
-    if (!myLogUi.isHighlighterEnabled(Factory.ID)) return VcsCommitStyle.DEFAULT;
     if (myShouldHighlightUser) {
       VcsUser currentUser = myLogData.getCurrentUser().get(details.getRoot());
       if (currentUser != null && VcsUserUtil.isSamePerson(currentUser, details.getAuthor())) {
@@ -64,18 +60,17 @@ public class MyCommitsHighlighter implements VcsLogHighlighter {
   private static boolean isFilteredByCurrentUser(@NotNull VcsLogFilterCollection filters) {
     VcsLogUserFilter userFilter = filters.get(VcsLogFilterCollection.USER_FILTER);
     if (userFilter == null) return false;
-    Collection<String> filterByName = ((VcsLogUserFilterImpl)userFilter).getUserNamesForPresentation();
-    if (Collections.singleton(VcsLogFilterObject.ME).containsAll(filterByName)) return true;
+    if (Collections.singleton(VcsLogFilterObject.ME).containsAll(userFilter.getValuesAsText())) return true;
     return false;
   }
 
   public static class Factory implements VcsLogHighlighterFactory {
-    @NotNull public static final String ID = "MY_COMMITS";
+    @NotNull @NonNls public static final String ID = "MY_COMMITS";
 
     @NotNull
     @Override
     public VcsLogHighlighter createHighlighter(@NotNull VcsLogData logData, @NotNull VcsLogUi logUi) {
-      return new MyCommitsHighlighter(logData, logUi);
+      return new MyCommitsHighlighter(logData);
     }
 
     @NotNull
@@ -87,7 +82,7 @@ public class MyCommitsHighlighter implements VcsLogHighlighter {
     @NotNull
     @Override
     public String getTitle() {
-      return "My Commits";
+      return VcsLogBundle.message("vcs.log.action.highlight.my.commits");
     }
 
     @Override

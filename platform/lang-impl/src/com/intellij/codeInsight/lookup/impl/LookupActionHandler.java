@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.codeInsight.lookup.impl;
 
@@ -6,6 +6,7 @@ import com.intellij.codeInsight.completion.CodeCompletionFeatures;
 import com.intellij.codeInsight.completion.CompletionProgressIndicator;
 import com.intellij.codeInsight.completion.impl.CompletionServiceImpl;
 import com.intellij.codeInsight.lookup.CharFilter;
+import com.intellij.codeInsight.lookup.LookupFocusDegree;
 import com.intellij.codeInsight.lookup.LookupManager;
 import com.intellij.featureStatistics.FeatureUsageTracker;
 import com.intellij.ide.ui.UISettings;
@@ -63,8 +64,8 @@ public abstract class LookupActionHandler extends EditorActionHandler {
 
   private static void executeUpOrDown(LookupImpl lookup, boolean up) {
     if (!lookup.isFocused()) {
-      boolean semiFocused = lookup.getFocusDegree() == LookupImpl.FocusDegree.SEMI_FOCUSED;
-      lookup.setFocusDegree(LookupImpl.FocusDegree.FOCUSED);
+      boolean semiFocused = lookup.getLookupFocusDegree() == LookupFocusDegree.SEMI_FOCUSED;
+      lookup.setLookupFocusDegree(LookupFocusDegree.FOCUSED);
       if (!up && !semiFocused) {
         return;
       }
@@ -104,7 +105,7 @@ public abstract class LookupActionHandler extends EditorActionHandler {
     }
   }
 
-  private static class UpDownInEditorHandler extends EditorActionHandler {
+  private static final class UpDownInEditorHandler extends EditorActionHandler {
     private final boolean myUp;
 
     private UpDownInEditorHandler(boolean up) {
@@ -125,11 +126,11 @@ public abstract class LookupActionHandler extends EditorActionHandler {
     protected void doExecute(@NotNull Editor editor, @Nullable Caret caret, DataContext dataContext) {
       FeatureUsageTracker.getInstance().triggerFeatureUsed(CodeCompletionFeatures.EDITING_COMPLETION_CONTROL_ARROWS);
       LookupImpl lookup = (LookupImpl)LookupManager.getActiveLookup(editor);
-      assert lookup != null : LookupImpl.getLastLookupDisposeTrace();
+      assert lookup != null;
       lookup.hideLookup(true);
-      EditorActionManager.getInstance().getActionHandler(myUp ? IdeActions.ACTION_EDITOR_MOVE_CARET_UP 
+      EditorActionManager.getInstance().getActionHandler(myUp ? IdeActions.ACTION_EDITOR_MOVE_CARET_UP
                                                               : IdeActions.ACTION_EDITOR_MOVE_CARET_DOWN)
-        .execute(editor, caret, dataContext);      
+        .execute(editor, caret, dataContext);
     }
   }
 
@@ -156,7 +157,7 @@ public abstract class LookupActionHandler extends EditorActionHandler {
 
     @Override
     protected void executeInLookup(final LookupImpl lookup, DataContext context, Caret caret) {
-      lookup.setFocusDegree(LookupImpl.FocusDegree.FOCUSED);
+      lookup.setLookupFocusDegree(LookupFocusDegree.FOCUSED);
       ScrollingUtil.movePageDown(lookup.getList());
     }
   }
@@ -168,7 +169,7 @@ public abstract class LookupActionHandler extends EditorActionHandler {
 
     @Override
     protected void executeInLookup(final LookupImpl lookup, DataContext context, Caret caret) {
-      lookup.setFocusDegree(LookupImpl.FocusDegree.FOCUSED);
+      lookup.setLookupFocusDegree(LookupFocusDegree.FOCUSED);
       ScrollingUtil.movePageUp(lookup.getList());
     }
   }

@@ -3,6 +3,7 @@ package com.intellij.uiDesigner.wizard;
 
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.NlsSafe;
 import com.intellij.ui.ColoredTableCellRenderer;
 import com.intellij.ui.SimpleTextAttributes;
 import com.intellij.uiDesigner.lw.LwComponent;
@@ -19,7 +20,7 @@ import java.awt.*;
  * @author Vladimir Kondratyev
  */
 final class FormPropertyTableCellRenderer extends ColoredTableCellRenderer{
-  private static final Logger LOG = Logger.getInstance("#com.intellij.uiDesigner.wizard.FormPropertyTableCellRenderer");
+  private static final Logger LOG = Logger.getInstance(FormPropertyTableCellRenderer.class);
 
   private final Palette myPalette;
   private final SimpleTextAttributes myAttrs1;
@@ -37,7 +38,7 @@ final class FormPropertyTableCellRenderer extends ColoredTableCellRenderer{
 
   @Override
   protected void customizeCellRenderer(
-    final JTable table,
+    final @NotNull JTable table,
     final Object value,
     final boolean selected,
     final boolean hasFocus,
@@ -64,7 +65,8 @@ final class FormPropertyTableCellRenderer extends ColoredTableCellRenderer{
     setIcon(icon);
 
     // Binding
-    append(component.getBinding(), myAttrs1);
+    @NlsSafe String binding = component.getBinding();
+    append(binding, myAttrs1);
 
     // Component class name and package
     final String shortClassName;

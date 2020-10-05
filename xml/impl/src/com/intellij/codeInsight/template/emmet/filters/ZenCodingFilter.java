@@ -5,6 +5,7 @@ import com.intellij.application.options.emmet.EmmetOptions;
 import com.intellij.codeInsight.template.emmet.nodes.GenerationNode;
 import com.intellij.codeInsight.template.emmet.tokens.TemplateToken;
 import com.intellij.openapi.extensions.ExtensionPointName;
+import com.intellij.openapi.util.NlsContexts;
 import com.intellij.psi.PsiElement;
 import org.jetbrains.annotations.NotNull;
 
@@ -16,7 +17,7 @@ import java.util.List;
  * @author Eugene.Kudelevsky
  */
 public abstract class ZenCodingFilter {
-  public static final ExtensionPointName<ZenCodingFilter> EP_NAME = new ExtensionPointName<>("com.intellij.xml.zenCodingFilter");
+  private static final ExtensionPointName<ZenCodingFilter> EP_NAME = new ExtensionPointName<>("com.intellij.xml.zenCodingFilter");
 
   private static final ZenCodingFilter[] OUR_STANDARD_FILTERS = new ZenCodingFilter[]{
     new XslZenCodingFilter(),
@@ -47,7 +48,7 @@ public abstract class ZenCodingFilter {
   }
 
   @NotNull
-  public abstract String getDisplayName();
+  public abstract @NlsContexts.Label String getDisplayName();
 
   public static List<ZenCodingFilter> getInstances() {
     List<ZenCodingFilter> generators = new ArrayList<>();

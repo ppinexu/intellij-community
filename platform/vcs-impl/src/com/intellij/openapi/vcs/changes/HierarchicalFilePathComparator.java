@@ -17,9 +17,9 @@ package com.intellij.openapi.vcs.changes;
 
 import com.intellij.ide.util.treeView.FileNameComparator;
 import com.intellij.openapi.util.SystemInfo;
-import com.intellij.openapi.util.io.FileUtilRt;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.FilePath;
+import com.intellij.util.text.CharSequenceSubSequence;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Comparator;
@@ -36,8 +36,8 @@ public class HierarchicalFilePathComparator implements Comparator<FilePath> {
 
   public static final HierarchicalFilePathComparator NATURAL = new HierarchicalFilePathComparator(true) {
     @Override
-    protected int compareFileNames(@NotNull String name1, @NotNull String name2) {
-      return FileNameComparator.INSTANCE.compare(name1, name2);
+    protected int compareFileNames(@NotNull CharSequence name1, @NotNull CharSequence name2) {
+      return FileNameComparator.INSTANCE.compare(name1.toString(), name2.toString());
     }
   };
 
@@ -49,8 +49,8 @@ public class HierarchicalFilePathComparator implements Comparator<FilePath> {
 
   @Override
   public int compare(@NotNull FilePath filePath1, @NotNull FilePath filePath2) {
-    String path1 = FileUtilRt.toSystemIndependentName(filePath1.getPath());
-    String path2 = FileUtilRt.toSystemIndependentName(filePath2.getPath());
+    String path1 = filePath1.getPath();
+    String path2 = filePath2.getPath();
 
     int commonPrefix = StringUtil.commonPrefixLength(path1, path2, myIgnoreCase);
 
@@ -68,19 +68,19 @@ public class HierarchicalFilePathComparator implements Comparator<FilePath> {
     }
     else {
       int start = StringUtil.lastIndexOf(path1, '/', 0, commonPrefix) + 1;
-
       int end1 = path1.indexOf('/', start);
       int end2 = path2.indexOf('/', start);
 
-      String name1 = end1 == -1 ? path1.substring(start) : path1.substring(start, end1);
-      String name2 = end2 == -1 ? path2.substring(start) : path2.substring(start, end2);
-
       boolean isDirectory1 = end1 != -1 || filePath1.isDirectory();
       boolean isDirectory2 = end2 != -1 || filePath2.isDirectory();
-
       if (isDirectory1 != isDirectory2) {
         return isDirectory1 ? -1 : 1;
       }
+
+      if (end1 == -1) end1 = path1.length();
+      if (end2 == -1) end2 = path2.length();
+      CharSequence name1 = new CharSequenceSubSequence(path1, start, end1);
+      CharSequence name2 = new CharSequenceSubSequence(path2, start, end2);
 
       return compareFileNames(name1, name2);
     }
@@ -89,7 +89,7 @@ public class HierarchicalFilePathComparator implements Comparator<FilePath> {
   /**
    * NB: Overriding methods should not return 0, if base method does not.
    */
-  protected int compareFileNames(@NotNull String name1, @NotNull String name2) {
+  protected int compareFileNames(@NotNull CharSequence name1, @NotNull CharSequence name2) {
     return StringUtil.compare(name1, name2, myIgnoreCase);
   }
 }

@@ -1,7 +1,7 @@
 // Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.refactoring.move.moveClassesOrPackages;
 
-import com.intellij.openapi.application.WriteAction;
+import com.intellij.model.ModelBranch;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleUtilCore;
 import com.intellij.openapi.project.Project;
@@ -34,6 +34,7 @@ public class AutocreatingSingleSourceRootMoveDestination extends AutocreatingMov
     mySourceRoot = sourceRoot;
   }
 
+  @NotNull
   @Override
   public PackageWrapper getTargetPackage() {
     return myPackage;
@@ -45,18 +46,18 @@ public class AutocreatingSingleSourceRootMoveDestination extends AutocreatingMov
   }
 
   @Override
-  public PsiDirectory getTargetIfExists(PsiFile source) {
+  public PsiDirectory getTargetIfExists(@NotNull PsiFile source) {
     return RefactoringUtil.findPackageDirectoryInSourceRoot(myPackage, mySourceRoot);
   }
 
   @Override
-  public PsiDirectory getTargetDirectory(PsiDirectory source) throws IncorrectOperationException {
-    return getDirectory();
+  public PsiDirectory getTargetDirectory(@Nullable PsiDirectory source) throws IncorrectOperationException {
+    return getDirectory(source);
   }
 
   @Override
   public PsiDirectory getTargetDirectory(PsiFile source) throws IncorrectOperationException {
-    return getDirectory();
+    return getDirectory(source);
   }
 
   @Override
@@ -76,13 +77,13 @@ public class AutocreatingSingleSourceRootMoveDestination extends AutocreatingMov
   }
 
   @Override
-  public void analyzeModuleConflicts(final Collection<PsiElement> elements,
-                                     MultiMap<PsiElement,String> conflicts, final UsageInfo[] usages) {
+  public void analyzeModuleConflicts(@NotNull final Collection<? extends PsiElement> elements,
+                                     @NotNull MultiMap<PsiElement,String> conflicts, final UsageInfo[] usages) {
     RefactoringConflictsUtil.analyzeModuleConflicts(getTargetPackage().getManager().getProject(), elements, usages, mySourceRoot, conflicts);
   }
 
   @Override
-  public boolean isTargetAccessible(Project project, VirtualFile place) {
+  public boolean isTargetAccessible(@NotNull Project project, @NotNull VirtualFile place) {
     final boolean inTestSourceContent = ProjectRootManager.getInstance(project).getFileIndex().isInTestSourceContent(place);
     final Module module = ModuleUtilCore.findModuleForFile(place, project);
     if (mySourceRoot != null &&
@@ -94,16 +95,14 @@ public class AutocreatingSingleSourceRootMoveDestination extends AutocreatingMov
   }
 
   PsiDirectory myTargetDirectory;
-  private PsiDirectory getDirectory() throws IncorrectOperationException {
+  private PsiDirectory getDirectory(@Nullable PsiElement source) throws IncorrectOperationException {
     if (myTargetDirectory == null) {
-      myTargetDirectory = WriteAction.compute(() -> {
-        try {
-          return RefactoringUtil.createPackageDirectoryInSourceRoot(myPackage, mySourceRoot);
-        }
-        catch (IncorrectOperationException e) {
-          return null;
-        }
-      });
+      VirtualFile sourceRoot = mySourceRoot;
+      ModelBranch branch = source == null ? null : ModelBranch.getPsiBranch(source);
+      if (branch != null) {
+        sourceRoot = branch.findFileCopy(mySourceRoot);
+      }
+      myTargetDirectory = RefactoringUtil.createPackageDirectoryInSourceRoot(myPackage, sourceRoot);
     }
     return myTargetDirectory;
   }

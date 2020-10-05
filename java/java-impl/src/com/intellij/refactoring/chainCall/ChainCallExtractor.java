@@ -29,6 +29,7 @@ import com.intellij.refactoring.util.RefactoringUtil;
 import com.intellij.util.ArrayUtil;
 import com.siyeh.ig.psiutils.ExpressionUtils;
 import org.jetbrains.annotations.Contract;
+import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -45,6 +46,7 @@ public interface ChainCallExtractor {
    * @param expressionType resulting type of the extracted expression
    * @return true if this extractor can create a mapping step from given expression
    */
+  @Contract(pure = true)
   boolean canExtractChainCall(@NotNull PsiMethodCallExpression call, PsiExpression expression, PsiType expressionType);
 
   /**
@@ -56,7 +58,8 @@ public interface ChainCallExtractor {
    * @return chain call. Result is correct only if {@link #canExtractChainCall} was checked before
    * for given expression and expressionType
    */
-  default String buildChainCall(PsiVariable variable, PsiExpression expression, PsiType expressionType) {
+  @Contract(pure = true)
+  default @NonNls String buildChainCall(PsiVariable variable, PsiExpression expression, PsiType expressionType) {
     if(expression instanceof PsiArrayInitializerExpression) {
       expression = RefactoringUtil.convertInitializerToNormalExpression(expression, expressionType);
     }
@@ -74,6 +77,8 @@ public interface ChainCallExtractor {
    * @return chain call. Result is correct only if {@link #canExtractChainCall} was checked before
    * for given expression and expressionType
    */
+  @Contract(pure = true)
+  @NonNls
   String getMethodName(PsiVariable variable, PsiExpression expression, PsiType expressionType);
 
   /**
@@ -84,6 +89,7 @@ public interface ChainCallExtractor {
    * @param newElementType new element type (to be passed as lambda parameter)
    * @return new call name. Default implementation returns current name.
    */
+  @Contract(pure = true)
   default String fixCallName(PsiMethodCallExpression call, PsiType newElementType) {
     return call.getMethodExpression().getReferenceName();
   }

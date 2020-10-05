@@ -17,6 +17,7 @@ package com.intellij.util;
 
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.Ref;
+import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -29,18 +30,18 @@ import java.lang.reflect.Field;
  * @param <T> the type of the field
  */
 public class FieldAccessor<E, T> {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.util.FieldAccessor");
+  private static final Logger LOG = Logger.getInstance(FieldAccessor.class);
 
   private Ref<Field> myFieldRef;
   private final Class<E> myClass;
   private final String myName;
   private final Class<T> myType;
 
-  public FieldAccessor(@NotNull Class<E> aClass, @NotNull String name) {
+  public FieldAccessor(@NotNull Class<E> aClass, @NotNull @NonNls String name) {
     this(aClass, name, null);
   }
 
-  public FieldAccessor(@NotNull Class<E> aClass, @NotNull String name, @Nullable Class<T> type) {
+  public FieldAccessor(@NotNull Class<E> aClass, @NotNull @NonNls String name, @Nullable Class<T> type) {
     myClass = aClass;
     myName = name;
     myType = type;

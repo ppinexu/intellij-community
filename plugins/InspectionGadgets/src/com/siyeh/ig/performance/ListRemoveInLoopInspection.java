@@ -4,7 +4,7 @@ package com.siyeh.ig.performance;
 import com.intellij.codeInsight.PsiEquivalenceUtil;
 import com.intellij.codeInspection.*;
 import com.intellij.codeInspection.dataFlow.DfaUtil;
-import com.intellij.codeInspection.dataFlow.value.DfaRelationValue;
+import com.intellij.codeInspection.dataFlow.value.RelationType;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Couple;
 import com.intellij.openapi.util.Pair;
@@ -15,6 +15,7 @@ import com.siyeh.InspectionGadgetsBundle;
 import com.siyeh.ig.callMatcher.CallMatcher;
 import com.siyeh.ig.psiutils.*;
 import org.jetbrains.annotations.Nls;
+import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
 import static com.intellij.util.ObjectUtils.tryCast;
@@ -68,7 +69,7 @@ public class ListRemoveInLoopInspection extends AbstractBaseJavaLocalInspectionT
         PsiBinaryExpression condition =
           tryCast(PsiUtil.skipParenthesizedExprDown(((PsiWhileStatement)loop).getCondition()), PsiBinaryExpression.class);
         if (condition == null) return false;
-        DfaRelationValue.RelationType relationType = DfaRelationValue.RelationType.fromElementType(condition.getOperationTokenType());
+        RelationType relationType = RelationType.fromElementType(condition.getOperationTokenType());
         if (relationType == null) return false;
         PsiExpression sizeExpression;
         switch (relationType) {
@@ -121,7 +122,7 @@ public class ListRemoveInLoopInspection extends AbstractBaseJavaLocalInspectionT
     @NotNull
     @Override
     public String getFamilyName() {
-      return InspectionGadgetsBundle.message("inspection.list.remove.in.loop.fix.family.name");
+      return CommonQuickFixBundle.message("fix.replace.with.x", "List.subList().clear()");
     }
 
     @Override
@@ -141,9 +142,9 @@ public class ListRemoveInLoopInspection extends AbstractBaseJavaLocalInspectionT
 
       String start = startEnd.getFirst();
       String end = startEnd.getSecond();
-      String replacement = ct.text(listExpression) + ".subList(" + start + "," + end + ").clear();";
-      replacement = "if(" + end + ">" + start + "){" + replacement + "}";
-      PsiIfStatement ifStatement = (PsiIfStatement)ct.replaceAndRestoreComments(loopStatement, replacement);
+      @NonNls final String statementText = ct.text(listExpression) + ".subList(" + start + "," + end + ").clear();";
+      final String replacementText = "if(" + end + ">" + start + "){" + statementText + "}";
+      PsiIfStatement ifStatement = (PsiIfStatement)ct.replaceAndRestoreComments(loopStatement, replacementText);
       ct = new CommentTracker();
       PsiExpression condition = ifStatement.getCondition();
       String simplified = JavaPsiMathUtil.simplifyComparison(condition, ct);
@@ -178,7 +179,7 @@ public class ListRemoveInLoopInspection extends AbstractBaseJavaLocalInspectionT
         PsiBinaryExpression condition =
           tryCast(PsiUtil.skipParenthesizedExprDown(((PsiWhileStatement)loopStatement).getCondition()), PsiBinaryExpression.class);
         if (condition == null) return null;
-        DfaRelationValue.RelationType relationType = DfaRelationValue.RelationType.fromElementType(condition.getOperationTokenType());
+        RelationType relationType = RelationType.fromElementType(condition.getOperationTokenType());
         if (relationType == null) return null;
         PsiExpression left = condition.getLOperand();
         PsiExpression right = condition.getROperand();

@@ -25,7 +25,7 @@ import java.util.Map;
 
 public class MavenCompilerAnnotationProcessorPathsImporter extends MavenImporter {
 
-  private final Logger LOG = Logger.getInstance("#org.jetbrains.idea.maven.importing.MavenCompilerAnnotationProcessorPathsImporter");
+  private final Logger LOG = Logger.getInstance(MavenCompilerAnnotationProcessorPathsImporter.class);
 
   public MavenCompilerAnnotationProcessorPathsImporter() {
     super("org.apache.maven.plugins", "maven-compiler-plugin");
@@ -122,6 +122,10 @@ public class MavenCompilerAnnotationProcessorPathsImporter extends MavenImporter
 
     for (Element path : config.getChildren("path")) {
       addToArtifacts.consume(path);
+    }
+
+    for (Element dependency : config.getChildren("dependency")) {
+      addToArtifacts.consume(dependency);
     }
 
     for (Element annotationProcessorPath : config.getChildren("annotationProcessorPath")) {

@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.xml.util;
 
 import com.intellij.codeInspection.InspectionProfile;
@@ -12,9 +12,10 @@ import com.intellij.lang.xhtml.XHTMLLanguage;
 import com.intellij.lang.xml.XMLLanguage;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.editor.XmlTypedHandlersAdditionalSupport;
 import com.intellij.openapi.fileTypes.FileType;
-import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.Disposer;
+import com.intellij.openapi.util.NlsSafe;
 import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.util.registry.RegistryValue;
@@ -40,8 +41,6 @@ import com.intellij.util.containers.ContainerUtil;
 import com.intellij.xml.*;
 import com.intellij.xml.impl.schema.XmlAttributeDescriptorImpl;
 import com.intellij.xml.impl.schema.XmlElementDescriptorImpl;
-import gnu.trove.THashMap;
-import gnu.trove.THashSet;
 import org.jetbrains.annotations.*;
 
 import java.nio.charset.Charset;
@@ -50,22 +49,24 @@ import java.util.*;
 /**
  * @author Maxim.Mossienko
  */
-public class HtmlUtil {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.xml.util.HtmlUtil");
+public final class HtmlUtil {
+  private static final Logger LOG = Logger.getInstance(HtmlUtil.class);
 
   @NonNls private static final String JSFC = "jsfc";
   @NonNls private static final String CHARSET = "charset";
-  @NonNls private static final String CHARSET_PREFIX = CHARSET+"=";
+  @NonNls private static final String CHARSET_PREFIX = CHARSET + "=";
   @NonNls public static final String HTML5_DATA_ATTR_PREFIX = "data-";
 
-  public static final String SCRIPT_TAG_NAME = "script";
-  public static final String STYLE_TAG_NAME = "style";
-  public static final String TEMPLATE_TAG_NAME = "template";
+  @NlsSafe public static final String SCRIPT_TAG_NAME = "script";
+  @NlsSafe public static final String STYLE_TAG_NAME = "style";
+  @NlsSafe public static final String TEMPLATE_TAG_NAME = "template";
 
-  public static final String STYLE_ATTRIBUTE_NAME = STYLE_TAG_NAME;
-  public static final String SRC_ATTRIBUTE_NAME = "src";
-  public static final String ID_ATTRIBUTE_NAME = "id";
-  public static final String CLASS_ATTRIBUTE_NAME = "class";
+  @NlsSafe public static final String STYLE_ATTRIBUTE_NAME = STYLE_TAG_NAME;
+  @NlsSafe public static final String SRC_ATTRIBUTE_NAME = "src";
+  @NlsSafe public static final String ID_ATTRIBUTE_NAME = "id";
+  @NlsSafe public static final String CLASS_ATTRIBUTE_NAME = "class";
+  @NlsSafe public static final String TYPE_ATTRIBUTE_NAME = "type";
+  @NlsSafe public static final String LANGUAGE_ATTRIBUTE_NAME = "language";
 
   @NonNls public static final String MATH_ML_NAMESPACE = "http://www.w3.org/1998/Math/MathML";
   @NonNls public static final String SVG_NAMESPACE = "http://www.w3.org/2000/svg";
@@ -80,56 +81,46 @@ public class HtmlUtil {
   private HtmlUtil() {
   }
 
-  private static final Set<String> EMPTY_TAGS_MAP = new THashSet<>();
-  @NonNls private static final String[] OPTIONAL_END_TAGS = {
+  private static final Set<String> EMPTY_TAGS_MAP = new HashSet<>();
+  private static final Set<String> OPTIONAL_END_TAGS_MAP = ContainerUtil.set(
     //"html",
     "head",
     //"body",
-    "p", "li", "dd", "dt", "thead", "tfoot", "tbody", "colgroup", "tr", "th", "td", "option", "embed", "noembed"
-  };
-  private static final Set<String> OPTIONAL_END_TAGS_MAP = new THashSet<>();
+    "p", "li", "dd", "dt", "thead", "tfoot", "tbody", "colgroup", "tr", "th", "td", "option", "embed", "noembed",
+    "caption"
+  );
 
-  @NonNls private static final String[] BLOCK_TAGS = {"p", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "dir", "menu", "pre",
-    "dl", "div", "center", "noscript", "noframes", "blockquote", "form", "isindex", "hr", "table", "fieldset", "address",
-    // nonexplicitly specified
-    "map",
-    // flow elements
-    "body", "object", "applet", "ins", "del", "dd", "li", "button", "th", "td", "iframe", "comment"
-  };
+  private static final Set<String> BLOCK_TAGS_MAP =
+    ContainerUtil.set("p", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "dir", "menu", "pre",
+                      "dl", "div", "center", "noscript", "noframes", "blockquote", "form", "isindex", "hr", "table", "fieldset", "address",
+                      // nonexplicitly specified
+                      "map",
+                      // flow elements
+                      "body", "object", "applet", "ins", "del", "dd", "li", "button", "th", "td", "iframe", "comment");
 
   // flow elements are block or inline, so they should not close <p> for example
-  @NonNls private static final String[] POSSIBLY_INLINE_TAGS =
-    {"a", "abbr", "acronym", "applet", "b", "basefont", "bdo", "big", "br", "button",
-      "cite", "code", "del", "dfn", "em", "font", "i", "iframe", "img", "input", "ins",
-      "kbd", "label", "map", "object", "q", "s", "samp", "select", "small", "span", "strike",
-      "strong", "sub", "sup", "textarea", "tt", "u", "var"};
+  private static final Set<String> POSSIBLY_INLINE_TAGS_MAP =
+    ContainerUtil.set("a", "abbr", "acronym", "applet", "b", "basefont", "bdo", "big", "br", "button",
+                      "cite", "code", "del", "dfn", "em", "font", "i", "iframe", "img", "input", "ins",
+                      "kbd", "label", "map", "object", "q", "s", "samp", "select", "small", "span", "strike",
+                      "strong", "sub", "sup", "textarea", "tt", "u", "var");
 
-  private static final Set<String> BLOCK_TAGS_MAP = new THashSet<>();
+  private static final Set<String> INLINE_ELEMENTS_CONTAINER_MAP = ContainerUtil.set("p", "h1", "h2", "h3", "h4", "h5", "h6", "pre");
 
-  @NonNls private static final String[] INLINE_ELEMENTS_CONTAINER = {"p", "h1", "h2", "h3", "h4", "h5", "h6", "pre"};
-  private static final Set<String> INLINE_ELEMENTS_CONTAINER_MAP = new THashSet<>();
-
-  private static final Set<String> POSSIBLY_INLINE_TAGS_MAP = new THashSet<>();
-
-  @NonNls private static final String[] HTML5_TAGS = {
-    "article", "aside", "audio", "canvas", "command", "datalist", "details", "embed", "figcaption", "figure", "footer", "header",
-    "keygen", "mark", "meter", "nav", "output", "progress", "rp", "rt", "ruby", "section", "source", "summary", "time", "video", "wbr",
-    "main"
-  };
-  private static final Set<String> HTML5_TAGS_SET = new THashSet<>();
-  private static final Map<String, Set<String>> AUTO_CLOSE_BY_MAP = new THashMap<>();
+  private static final Set<String> HTML5_TAGS_SET = ContainerUtil.set("article", "aside", "audio", "canvas", "command", "datalist",
+                                                                      "details", "embed", "figcaption", "figure", "footer", "header",
+                                                                      "keygen", "mark", "meter", "nav", "output", "progress", "rp", "rt",
+                                                                      "ruby", "section", "source", "summary", "time", "video", "wbr",
+                                                                      "main"
+  );
+  private static final Map<String, Set<String>> AUTO_CLOSE_BY_MAP = new HashMap<>();
 
   static {
     for (HTMLControls.Control control : HTMLControls.getControls()) {
       final String tagName = StringUtil.toLowerCase(control.name);
       if (control.endTag == HTMLControls.TagState.FORBIDDEN) EMPTY_TAGS_MAP.add(tagName);
-      AUTO_CLOSE_BY_MAP.put(tagName, new THashSet<>(control.autoClosedBy));
+      AUTO_CLOSE_BY_MAP.put(tagName, new HashSet<>(control.autoClosedBy));
     }
-    ContainerUtil.addAll(OPTIONAL_END_TAGS_MAP, OPTIONAL_END_TAGS);
-    ContainerUtil.addAll(BLOCK_TAGS_MAP, BLOCK_TAGS);
-    ContainerUtil.addAll(INLINE_ELEMENTS_CONTAINER_MAP, INLINE_ELEMENTS_CONTAINER);
-    ContainerUtil.addAll(POSSIBLY_INLINE_TAGS_MAP, POSSIBLY_INLINE_TAGS);
-    ContainerUtil.addAll(HTML5_TAGS_SET, HTML5_TAGS);
   }
 
   public static boolean isSingleHtmlTag(@NotNull XmlTag tag, boolean lowerCase) {
@@ -209,7 +200,8 @@ public class HtmlUtil {
             }
           }
         }
-      } else if (parent instanceof HtmlDocumentImpl) {
+      }
+      else if (parent instanceof HtmlDocumentImpl) {
         final XmlNSDescriptor nsDescriptor = descriptor.getNSDescriptor();
         for (XmlElementDescriptor elementDescriptor : nsDescriptor.getRootElementsDescriptors((XmlDocument)parent)) {
           if (isHtmlBlockTag(elementDescriptor.getName()) && !variants.contains(elementDescriptor)) {
@@ -272,7 +264,7 @@ public class HtmlUtil {
     return false;
   }
 
-  public static XmlAttributeDescriptor[] getCustomAttributeDescriptors(XmlElement context) {
+  public static XmlAttributeDescriptor[] getCustomAttributeDescriptors(PsiElement context) {
     String entitiesString = getEntitiesString(context, XmlEntitiesInspection.ATTRIBUTE_SHORT_NAME);
     if (entitiesString == null) return XmlAttributeDescriptor.EMPTY;
 
@@ -379,9 +371,6 @@ public class HtmlUtil {
     }
     XmlProlog prolog = doc.getProlog();
     XmlDoctype doctype = prolog != null ? prolog.getDoctype() : null;
-    if (!isHtmlTagContainingFile(doc)) {
-      return false;
-    }
 
     final PsiFile htmlFile = doc.getContainingFile();
 
@@ -396,7 +385,7 @@ public class HtmlUtil {
 
     if (doctype == null) {
       LOG.debug("DOCTYPE for " + htmlFileFullName + " is null");
-      return Html5SchemaProvider.getHtml5SchemaLocation()
+      return isHtmlTagContainingFile(doc) && Html5SchemaProvider.getHtml5SchemaLocation()
         .equals(ExternalResourceManagerEx.getInstanceEx().getDefaultHtmlDoctype(doc.getProject()));
     }
 
@@ -429,7 +418,7 @@ public class HtmlUtil {
 
     String doctype = null;
     if (doc != null) {
-       doctype = XmlUtil.getDtdUri(doc);
+      doctype = XmlUtil.getDtdUri(doc);
     }
     doctype = doctype == null ? ExternalResourceManagerEx.getInstanceEx().getDefaultHtmlDoctype(tag.getProject()) : doctype;
     return XmlUtil.XHTML4_SCHEMA_LOCATION.equals(doctype) ||
@@ -468,7 +457,9 @@ public class HtmlUtil {
     final PsiElement declaration = descriptor.getDeclaration();
     final PsiFile file = declaration != null ? declaration.getContainingFile() : null;
     final String name = file != null ? file.getName() : null;
-    return "meta.rnc".equals(name);
+    return "meta.rnc".equals(name) || "web-forms.rnc".equals(name)
+           || "embed.rnc".equals(name) || "tables.rnc".equals(name)
+           || "media.rnc".equals(name);
   }
 
   public static boolean tagHasHtml5Schema(@NotNull XmlTag context) {
@@ -477,8 +468,8 @@ public class HtmlUtil {
       XmlNSDescriptor nsDescriptor = descriptor.getNSDescriptor();
       XmlFile descriptorFile = nsDescriptor != null ? nsDescriptor.getDescriptorFile() : null;
       String descriptorPath = descriptorFile != null ? descriptorFile.getVirtualFile().getPath() : null;
-      return Comparing.equal(Html5SchemaProvider.getHtml5SchemaLocation(), descriptorPath) ||
-             Comparing.equal(Html5SchemaProvider.getXhtml5SchemaLocation(), descriptorPath);
+      return Objects.equals(Html5SchemaProvider.getHtml5SchemaLocation(), descriptorPath) ||
+             Objects.equals(Html5SchemaProvider.getXhtml5SchemaLocation(), descriptorPath);
     }
     return false;
   }
@@ -497,14 +488,15 @@ public class HtmlUtil {
       while (charsetPrefixEnd < content.length() && Character.isWhitespace(content.charAt(charsetPrefixEnd))) ++charsetPrefixEnd;
       if (charsetPrefixEnd < content.length() && content.charAt(charsetPrefixEnd) == '=') break;
       charPrefix = StringUtil.indexOf(content, CHARSET, charsetPrefixEnd);
-    } while(true);
+    }
+    while (true);
 
     final Ref<String> charsetNameRef = new Ref<>();
     try {
       new HtmlBuilderDriver(content).build(new XmlBuilder() {
-        @NonNls final Set<String> inTag = new THashSet<>();
+        @NonNls final Set<String> inTag = new HashSet<>();
         boolean metHttpEquiv;
-        boolean metHttml5Charset;
+        boolean metHtml5Charset;
 
         @Override
         public void doctype(@Nullable final CharSequence publicId,
@@ -529,7 +521,7 @@ public class HtmlUtil {
         @Override
         public void endTag(final CharSequence localName, final String namespace, final int startoffset, final int endoffset) {
           @NonNls final String name = StringUtil.toLowerCase(localName.toString());
-          if ("meta".equals(name) && (metHttpEquiv || metHttml5Charset) && contentAttributeValue != null) {
+          if ("meta".equals(name) && (metHttpEquiv || metHtml5Charset) && contentAttributeValue != null) {
             String charsetName;
             if (metHttpEquiv) {
               int start = contentAttributeValue.indexOf(CHARSET_PREFIX);
@@ -550,7 +542,7 @@ public class HtmlUtil {
           }
           inTag.remove(name);
           metHttpEquiv = false;
-          metHttml5Charset = false;
+          metHtml5Charset = false;
           contentAttributeValue = null;
         }
 
@@ -565,7 +557,7 @@ public class HtmlUtil {
               metHttpEquiv |= value.equals("content-type");
             }
             else if (name.equals(CHARSET)) {
-              metHttml5Charset = true;
+              metHtml5Charset = true;
               contentAttributeValue = value;
             }
             if (name.equals("content")) {
@@ -607,14 +599,7 @@ public class HtmlUtil {
   }
 
   public static boolean supportsXmlTypedHandlers(@NotNull PsiFile file) {
-    Language language = file.getLanguage();
-    while (language != null) {
-      if ("JavaScript".equals(language.getID())) return true;
-      if ("Dart".equals(language.getID())) return true;
-      language = language.getBaseLanguage();
-    }
-
-    return false;
+    return XmlTypedHandlersAdditionalSupport.supportsTypedHandlers(file);
   }
 
   public static boolean hasHtmlPrefix(@NotNull String url) {
@@ -626,7 +611,7 @@ public class HtmlUtil {
 
   public static boolean isHtmlFile(@NotNull PsiElement element) {
     Language language = element.getLanguage();
-    return language.isKindOf(HTMLLanguage.INSTANCE) || language == XHTMLLanguage.INSTANCE;
+    return language.isKindOf(HTMLLanguage.INSTANCE) || language.isKindOf(XHTMLLanguage.INSTANCE);
   }
 
   public static boolean isHtmlFile(@NotNull VirtualFile file) {
@@ -697,7 +682,7 @@ public class HtmlUtil {
   }
 
   @Contract("!null -> !null")
-  public static String getTagPresentation(@Nullable XmlTag tag) {
+  public static @NlsSafe String getTagPresentation(@Nullable XmlTag tag) {
     if (tag == null) return null;
     StringBuilder builder = new StringBuilder(tag.getLocalName());
     String idValue = getAttributeValue(tag, ID_ATTRIBUTE_NAME);
@@ -771,7 +756,7 @@ public class HtmlUtil {
       }
 
       @Override
-      public void visitElement(PsiElement element) {
+      public void visitElement(@NotNull PsiElement element) {
         if (element.getLanguage() instanceof XMLLanguage) {
           super.visitElement(element);
         }

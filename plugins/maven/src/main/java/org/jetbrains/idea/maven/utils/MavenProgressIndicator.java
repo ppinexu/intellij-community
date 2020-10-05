@@ -16,9 +16,9 @@
 package org.jetbrains.idea.maven.utils;
 
 import com.intellij.openapi.progress.EmptyProgressIndicator;
-import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.util.Condition;
+import com.intellij.openapi.util.NlsContexts;
 import org.jetbrains.idea.maven.buildtool.MavenSyncConsole;
 import org.jetbrains.idea.maven.server.MavenServerProgressIndicator;
 
@@ -57,11 +57,11 @@ public class MavenProgressIndicator {
     return myIndicator;
   }
 
-  public synchronized void setText(String text) {
+  public synchronized void setText(@NlsContexts.ProgressText String text) {
     myIndicator.setText(text);
   }
 
-  public synchronized void setText2(String text) {
+  public synchronized void setText2(@NlsContexts.ProgressDetails String text) {
     myIndicator.setText2(text);
   }
 
@@ -106,10 +106,6 @@ public class MavenProgressIndicator {
     if (isCanceled()) throw new MavenProcessCanceledException();
   }
 
-  public void checkCanceledNative() {
-    if (isCanceled()) throw new ProcessCanceledException();
-  }
-
   public void startedDownload(MavenServerProgressIndicator.ResolveType type, String id) {
 
     if (mySyncSupplier != null) {
@@ -133,8 +129,8 @@ public class MavenProgressIndicator {
   }
 
   private static class MyEmptyProgressIndicator extends EmptyProgressIndicator {
-    private String myText;
-    private String myText2;
+    private @NlsContexts.ProgressText String myText;
+    private @NlsContexts.ProgressDetails String myText2;
     private double myFraction;
 
     @Override

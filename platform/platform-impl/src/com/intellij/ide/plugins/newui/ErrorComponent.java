@@ -1,13 +1,15 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.plugins.newui;
 
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ModalityState;
 import com.intellij.openapi.ui.DialogWrapper;
+import com.intellij.openapi.util.text.HtmlChunk;
 import com.intellij.ui.ColorUtil;
 import com.intellij.ui.HyperlinkAdapter;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -19,9 +21,8 @@ import javax.swing.text.html.StyleSheet;
 /**
  * @author Alexander Lobas
  */
-public class ErrorComponent {
-  private static final String ENABLE_KEY = "EnableCallback";
-  private static final String DISABLE_KEY = "DisableCallback";
+public final class ErrorComponent {
+  private static final String KEY = "EnableCallback";
 
   @NotNull
   public static JComponent create(@NotNull JPanel panel, @Nullable Object constraints) {
@@ -39,7 +40,7 @@ public class ErrorComponent {
     editorPane.addHyperlinkListener(new HyperlinkAdapter() {
       @Override
       protected void hyperlinkActivated(HyperlinkEvent e) {
-        Object callback = editorPane.getClientProperty(ENABLE_KEY.equals(e.getDescription()) ? ENABLE_KEY : DISABLE_KEY);
+        Object callback = editorPane.getClientProperty(KEY);
         if (callback instanceof Runnable) {
           ApplicationManager.getApplication().invokeLater((Runnable)callback, ModalityState.any());
         }
@@ -59,33 +60,29 @@ public class ErrorComponent {
   }
 
   public static void show(@NotNull JComponent errorComponent,
-                          @NotNull String message,
-                          @Nullable String enableAction,
-                          @Nullable Runnable enableCallback,
-                          @Nullable String disableAction,
-                          @Nullable Runnable disableCallback) {
+                          @NotNull @Nls String message,
+                          @Nullable @Nls String action,
+                          @Nullable Runnable enableCallback) {
     JEditorPane editorPane = (JEditorPane)errorComponent;
 
-    editorPane.setText("<html><span>" + message + "</span>" +
-                       (enableCallback == null ? "" : "&nbsp;<a href='" + ENABLE_KEY + "'>" + enableAction + "</a>") +
-                       (disableCallback == null ? "" : (enableCallback == null ? "&nbsp;" : "<br>") + "<a href='" + DISABLE_KEY + "'>" + disableAction + "</a>") +
-                       "</html>");
+    HtmlChunk.Element html = HtmlChunk.html().children(HtmlChunk.span().addText(message));
+    if (enableCallback != null) {
+      html = html.children(HtmlChunk.nbsp(), HtmlChunk.link("link", action));
+    }
+    editorPane.setText(html.toString());
 
-    editorPane.putClientProperty(ENABLE_KEY, enableCallback);
-    editorPane.putClientProperty(DISABLE_KEY, disableCallback);
+    editorPane.putClientProperty(KEY, enableCallback);
   }
 
   @NotNull
   public static JComponent show(@NotNull JPanel panel,
                                 @Nullable Object constraints,
                                 @Nullable JComponent errorComponent,
-                                @NotNull String message,
-                                @Nullable String action,
-                                @Nullable Runnable enableCallback,
-                                @Nullable String disableAction,
-                                @Nullable Runnable disableCallback) {
+                                @NotNull @Nls String message,
+                                @Nullable @Nls String action,
+                                @Nullable Runnable enableCallback) {
     JComponent component = errorComponent == null ? create(panel, constraints) : errorComponent;
-    show(component, message, action, enableCallback, disableAction, disableCallback);
+    show(component, message, action, enableCallback);
     return component;
   }
 }

@@ -1,3 +1,4 @@
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.intellij.plugins.xpathView.search;
 
 import com.intellij.openapi.module.Module;
@@ -21,12 +22,13 @@ import com.intellij.psi.search.PsiSearchScopeUtil;
 import com.intellij.util.Processor;
 import com.intellij.util.xmlb.annotations.Attribute;
 import com.intellij.util.xmlb.annotations.Tag;
-import gnu.trove.THashSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.Objects;
 
 /**
  * Copyright 2006 Sascha Weinreuter
@@ -186,7 +188,7 @@ public final class SearchScope {
           iterator = new MyFileIterator(processor, virtualFile13 -> searchScope.contains(virtualFile13));
           if (searchScope.isSearchInLibraries()) {
             final OrderEnumerator enumerator = OrderEnumerator.orderEntries(project).withoutModuleSourceEntries().withoutDepModules();
-            final Collection<VirtualFile> libraryFiles = new THashSet<>();
+            final Collection<VirtualFile> libraryFiles = new HashSet<>();
             Collections.addAll(libraryFiles, enumerator.getClassesRoots());
             Collections.addAll(libraryFiles, enumerator.getSourceRoots());
             final Processor<VirtualFile> adapter = virtualFile1 -> iterator.processFile(virtualFile1);
@@ -219,9 +221,9 @@ public final class SearchScope {
     SearchScope scope = (SearchScope)o;
     return myRecursive == scope.myRecursive &&
            Comparing.equal(myCustomScope, scope.myCustomScope) &&
-           Comparing.equal(myModuleName, scope.myModuleName) &&
-           Comparing.equal(myPath, scope.myPath) &&
-           Comparing.equal(myScopeName, scope.myScopeName) &&
+           Objects.equals(myModuleName, scope.myModuleName) &&
+           Objects.equals(myPath, scope.myPath) &&
+           Objects.equals(myScopeName, scope.myScopeName) &&
            myScopeType == scope.myScopeType;
   }
 
@@ -242,7 +244,7 @@ public final class SearchScope {
   }
 
   private static void iterateRecursively(VirtualFile virtualFile, final Processor<? super VirtualFile> processor, boolean recursive) {
-    VfsUtilCore.visitChildrenRecursively(virtualFile, new VirtualFileVisitor(recursive ? null : VirtualFileVisitor.ONE_LEVEL_DEEP) {
+    VfsUtilCore.visitChildrenRecursively(virtualFile, new VirtualFileVisitor<Void>(recursive ? null : VirtualFileVisitor.ONE_LEVEL_DEEP) {
       @Override
       public boolean visitFile(@NotNull VirtualFile file) {
         if (!file.isDirectory()) {

@@ -3,6 +3,8 @@
 package com.intellij.execution;
 
 import com.intellij.execution.configurations.RunConfiguration;
+import org.jetbrains.annotations.Nls;
+import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -29,9 +31,11 @@ public abstract class ExecutionTarget {
    * Id is used to save selected target between restarts
    */
   @NotNull
+  @NonNls
   public abstract String getId();
 
   @NotNull
+  @Nls
   public abstract String getDisplayName();
 
   @Nullable
@@ -58,6 +62,14 @@ public abstract class ExecutionTarget {
    */
   public boolean isReady() {
     return true;
+  }
+
+  /**
+   * Implementation-specific logic to determine if an external plugin is responsible for managing this target.
+   * @return true if the target is externally managed, or false for the platform to manage
+   */
+  public boolean isExternallyManaged() {
+    return false;
   }
 
   @Override

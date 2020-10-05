@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.siyeh.ig.errorhandling;
 
 import com.intellij.codeInsight.Nullability;
@@ -9,10 +9,10 @@ import com.intellij.codeInspection.ProblemDescriptor;
 import com.intellij.codeInspection.ProblemsHolder;
 import com.intellij.codeInspection.dataFlow.*;
 import com.intellij.codeInspection.dataFlow.instructions.MethodCallInstruction;
-import com.intellij.codeInspection.dataFlow.value.DfaRelationValue.RelationType;
 import com.intellij.codeInspection.dataFlow.value.DfaValue;
 import com.intellij.codeInspection.dataFlow.value.DfaValueFactory;
 import com.intellij.codeInspection.dataFlow.value.DfaVariableValue;
+import com.intellij.codeInspection.dataFlow.value.RelationType;
 import com.intellij.codeInspection.ui.MultipleCheckboxOptionsPanel;
 import com.intellij.ide.fileTemplates.FileTemplate;
 import com.intellij.ide.fileTemplates.FileTemplateManager;
@@ -36,18 +36,19 @@ import com.siyeh.ig.psiutils.VariableAccessUtils;
 import com.siyeh.ig.psiutils.VariableNameGenerator;
 import one.util.streamex.StreamEx;
 import org.jetbrains.annotations.Nls;
+import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
+import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.Properties;
-import java.util.function.Consumer;
 
 public class CatchMayIgnoreExceptionInspection extends AbstractBaseJavaLocalInspectionTool {
 
-  private static final String IGNORED_PARAMETER_NAME = "ignored";
+  private static final @NonNls String IGNORED_PARAMETER_NAME = "ignored";
 
   public boolean m_ignoreCatchBlocksWithComments = true;
   public boolean m_ignoreNonEmptyCatchBlock = true;
@@ -155,18 +156,36 @@ public class CatchMayIgnoreExceptionInspection extends AbstractBaseJavaLocalInsp
         PsiClass exceptionClass = exception.resolve();
         if (exceptionClass == null) return false;
 
-        DataFlowRunner runner = new StandardDataFlowRunner(false, block);
-        DfaValueFactory factory = runner.getFactory();
-        DfaVariableValue exceptionVar = factory.getVarFactory().createVariableValue(parameter);
-        DfaVariableValue stableExceptionVar = factory.getVarFactory().createVariableValue(new LightParameter("tmp", exception, block));
+        class CatchDataFlowRunner extends DataFlowRunner {
+          final DfaVariableValue myExceptionVar;
+          final DfaVariableValue myStableExceptionVar;
 
-        StandardInstructionVisitor visitor = new IgnoredExceptionVisitor(parameter, block, exceptionClass, stableExceptionVar);
-        Consumer<DfaMemoryState> stateAdjuster = state -> {
-          state.applyCondition(factory.createCondition(exceptionVar, RelationType.EQ, stableExceptionVar));
-          state.applyCondition(
-            factory.createCondition(exceptionVar, RelationType.IS, factory.createTypeValue(exception, Nullability.NOT_NULL)));
-          };
-        return runner.analyzeCodeBlock(block, visitor, stateAdjuster) == RunnerResult.OK;
+          CatchDataFlowRunner() {
+            super(holder.getProject(), block);
+            DfaValueFactory factory = getFactory();
+            myExceptionVar = factory.getVarFactory().createVariableValue(parameter);
+            myStableExceptionVar = factory.getVarFactory().createVariableValue(new LightParameter("tmp", exception, block));
+          }
+
+          @NotNull
+          @Override
+          protected List<DfaInstructionState> createInitialInstructionStates(@NotNull PsiElement psiBlock,
+                                                                             @NotNull Collection<? extends DfaMemoryState> memStates,
+                                                                             @NotNull ControlFlow flow) {
+            DfaValueFactory factory = getFactory();
+
+            for (DfaMemoryState memState : memStates) {
+              memState.applyCondition(myExceptionVar.eq(myStableExceptionVar));
+              memState.applyCondition(
+                myExceptionVar.cond(RelationType.IS, factory.getObjectType(exception, Nullability.NOT_NULL)));
+            }
+            return super.createInitialInstructionStates(psiBlock, memStates, flow);
+          }
+        }
+
+        CatchDataFlowRunner runner = new CatchDataFlowRunner();
+        StandardInstructionVisitor visitor = new IgnoredExceptionVisitor(parameter, block, exceptionClass, runner.myStableExceptionVar);
+        return runner.analyzeCodeBlock(block, visitor) == RunnerResult.OK;
       }
     };
   }
@@ -179,7 +198,7 @@ public class CatchMayIgnoreExceptionInspection extends AbstractBaseJavaLocalInsp
   static class IgnoredExceptionVisitor extends SideEffectVisitor {
     private final @NotNull PsiParameter myParameter;
     private final @NotNull PsiCodeBlock myBlock;
-    private final @NotNull List<PsiMethod> myMethods;
+    @NonNls private final @NotNull List<PsiMethod> myMethods;
     private final @NotNull DfaVariableValue myExceptionVar;
 
     IgnoredExceptionVisitor(@NotNull PsiParameter parameter,
@@ -202,7 +221,7 @@ public class CatchMayIgnoreExceptionInspection extends AbstractBaseJavaLocalInsp
         // Methods like "getCause" and "getMessage" return "null" for our test exception
         if (memState.areEqual(qualifier, myExceptionVar)) {
           memState.pop();
-          memState.push(runner.getFactory().getConstFactory().getNull());
+          memState.push(runner.getFactory().getNull());
           return nextInstruction(instruction, runner, memState);
         }
       }
@@ -255,7 +274,7 @@ public class CatchMayIgnoreExceptionInspection extends AbstractBaseJavaLocalInsp
     }
   }
 
-  private static class RenameCatchParameterFix implements LocalQuickFix {
+  private static final class RenameCatchParameterFix implements LocalQuickFix {
     private final String myName;
 
     private RenameCatchParameterFix(String name) {

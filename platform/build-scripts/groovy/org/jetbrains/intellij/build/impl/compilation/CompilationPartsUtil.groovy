@@ -1,7 +1,8 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.intellij.build.impl.compilation
 
 import com.google.gson.Gson
+import com.intellij.openapi.util.Pair
 import com.intellij.openapi.util.SystemInfo
 import com.intellij.openapi.util.Trinity
 import com.intellij.openapi.util.io.FileUtil
@@ -31,12 +32,19 @@ import org.jetbrains.intellij.build.impl.CompilationContextImpl
 import org.jetbrains.intellij.build.impl.logging.IntelliJBuildException
 
 import java.nio.charset.StandardCharsets
+import java.nio.file.FileVisitOption
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.attribute.BasicFileAttributes
+import java.nio.file.attribute.FileTime
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import java.util.function.Consumer
+import java.util.function.Predicate
 
 @CompileStatic
 class CompilationPartsUtil {
@@ -291,7 +299,7 @@ class CompilationPartsUtil {
     }
     String persistentCache = System.getProperty('agent.persistent.cache')
     String cache = persistentCache ?: new File(classesOutput).parentFile.getAbsolutePath()
-    File tempDownloadsStorage = new File(cache, 'idea-compile-parts')
+    File tempDownloadsStorage = new File(cache, "idea-compile-parts-${metadata.branch}")
 
     Set<String> upToDate = ContainerUtil.newConcurrentSet()
 
@@ -371,10 +379,10 @@ class CompilationPartsUtil {
     messages.block("Check previously downloaded archives") {
       long start = System.nanoTime()
       contexts.each { ctx ->
+        ctx.jar = new File(tempDownloadsStorage, "${ctx.name}/${ctx.hash}.jar")
         if (upToDate.contains(ctx.name)) return
         toUnpack.add(ctx)
         executor.submit {
-          ctx.jar = new File(tempDownloadsStorage, "${ctx.name}/${ctx.hash}.jar")
           def file = ctx.jar
           if (file.exists() && ctx.hash != computeHash(file)) {
             messages.info("File $file has unexpected hash, will refetch")
@@ -392,12 +400,48 @@ class CompilationPartsUtil {
       executor.reportErrors(messages)
     }
 
+    messages.block("Cleanup outdated compiled classes archives") {
+      long start = System.nanoTime()
+      int count = 0
+      long bytes = 0
+      try {
+        def preserve = new HashSet<Path>(contexts.collect { it.jar.toPath() })
+        def epoch = FileTime.fromMillis(0)
+        def daysAgo = FileTime.fromMillis(System.currentTimeMillis() - TimeUnit.DAYS.toMillis(4))
+        FileUtil.ensureExists(tempDownloadsStorage)
+        // We need to traverse with depth 3 since first level is [production, test], second level is module name, third is file.
+        Files
+          .walk(tempDownloadsStorage.toPath(), 3, FileVisitOption.FOLLOW_LINKS)
+          .filter({ !preserve.contains(it) } as Predicate<Path>)
+          .forEach({ Path file ->
+            BasicFileAttributes attr = Files.readAttributes(file, BasicFileAttributes.class)
+            if (attr.isRegularFile()) {
+              def lastAccessTime = attr.lastAccessTime()
+              if (lastAccessTime > epoch && lastAccessTime < daysAgo) {
+                count++
+                bytes += attr.size()
+                FileUtil.delete(file)
+              }
+            }
+                   } as Consumer<Path>)
+      }
+      catch (Throwable e) {
+        messages.warning("Failed to cleanup outdated archives: $e.message")
+      }
+
+      messages.reportStatisticValue('compile-parts:cleanup:time',
+                                    TimeUnit.NANOSECONDS.toMillis((System.nanoTime() - start)).toString())
+      messages.reportStatisticValue('compile-parts:removed:bytes', bytes.toString())
+      messages.reportStatisticValue('compile-parts:removed:count', count.toString())
+    }
 
     messages.block("Fetch compiled classes archives") {
       long start = System.nanoTime()
 
       String prefix = metadata.prefix
       String serverUrl = metadata.serverUrl
+
+      Set<Pair<FetchAndUnpackContext, Integer>> failed = ContainerUtil.newConcurrentSet()
 
       if (!toDownload.isEmpty()) {
         initLog4J(messages)
@@ -437,7 +481,7 @@ class CompilationPartsUtil {
             def get = new HttpGet("${urlWithPrefix}${ctx.name}/${ctx.jar.name}")
             httpClient.execute(get).withCloseable { response ->
               if (response.getStatusLine().getStatusCode() != HttpStatus.SC_OK) {
-                messages.warning("Failed to fetch '${ctx.name}/${ctx.jar.name}', status code: ${response.getStatusLine().getStatusCode()}")
+                failed.add(Pair.create(ctx, response.getStatusLine().getStatusCode()))
               }
               else {
                 new BufferedInputStream(response.getEntity().getContent()).withCloseable { bis ->
@@ -464,6 +508,13 @@ class CompilationPartsUtil {
       messages.reportStatisticValue('compile-parts:downloaded:bytes', downloadedBytes.toString())
       messages.reportStatisticValue('compile-parts:downloaded:count', toDownload.size().toString())
 
+      if (!failed.isEmpty()) {
+        failed.each { pair ->
+          messages.warning("Failed to fetch '${pair.first.name}/${pair.first.jar.name}', status code: ${pair.second}".toString())
+        }
+        messages.error("Failed to fetch ${failed.size()} file${failed.size() != 1 ? 's' : ''}, see details above")
+      }
+
       executor.reportErrors(messages)
     }
 
@@ -477,7 +528,6 @@ class CompilationPartsUtil {
           def computed = computeHash(ctx.jar)
           def expected = ctx.hash
           if (expected != computed) {
-            messages.warning("Downloaded file '$ctx.jar' hash mismatch, expected '$expected', got $computed")
             failed.add(Trinity.create(ctx.jar, expected, computed))
           }
           return

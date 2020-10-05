@@ -15,7 +15,7 @@
  */
 package com.jetbrains.python.parsing;
 
-import com.intellij.lang.PsiBuilder;
+import com.intellij.lang.SyntaxTreeBuilder;
 import com.jetbrains.python.psi.LanguageLevel;
 import org.jetbrains.annotations.NotNull;
 
@@ -26,11 +26,11 @@ public class ParsingContext {
   private final StatementParsing stmtParser;
   private final ExpressionParsing expressionParser;
   private final FunctionParsing functionParser;
-  private final PsiBuilder myBuilder;
+  private final SyntaxTreeBuilder myBuilder;
   private final LanguageLevel myLanguageLevel;
   private final Deque<ParsingScope> myScopes;
 
-  public ParsingContext(final PsiBuilder builder, LanguageLevel languageLevel, StatementParsing.FUTURE futureFlag) {
+  public ParsingContext(final SyntaxTreeBuilder builder, LanguageLevel languageLevel, StatementParsing.FUTURE futureFlag) {
     myBuilder = builder;
     myLanguageLevel = languageLevel;
     stmtParser = new StatementParsing(this, futureFlag);
@@ -42,11 +42,15 @@ public class ParsingContext {
 
   @NotNull
   public ParsingScope popScope() {
-    return myScopes.pop();
+    final ParsingScope prevScope = myScopes.pop();
+    resetBuilderCache(prevScope);
+    return prevScope;
   }
 
   public void pushScope(@NotNull ParsingScope scope) {
+    final ParsingScope prevScope = getScope();
     myScopes.push(scope);
+    resetBuilderCache(prevScope);
   }
 
   @NotNull
@@ -66,7 +70,7 @@ public class ParsingContext {
     return functionParser;
   }
 
-  public PsiBuilder getBuilder() {
+  public SyntaxTreeBuilder getBuilder() {
     return myBuilder;
   }
 
@@ -76,5 +80,13 @@ public class ParsingContext {
 
   public ParsingScope emptyParsingScope() {
     return new ParsingScope();
+  }
+
+  private void resetBuilderCache(@NotNull ParsingScope prevScope) {
+    if (!getScope().equals(prevScope)) {
+      // builder could cache some data based on the previous scope (e.g. token type)
+      // and we have to reset its cache if scope has changed
+      getBuilder().mark().rollbackTo();
+    }
   }
 }

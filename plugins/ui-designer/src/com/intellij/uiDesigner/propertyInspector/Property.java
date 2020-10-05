@@ -2,6 +2,7 @@
 package com.intellij.uiDesigner.propertyInspector;
 
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.util.NlsSafe;
 import com.intellij.uiDesigner.lw.IComponent;
 import com.intellij.uiDesigner.lw.IProperty;
 import com.intellij.uiDesigner.radComponents.RadComponent;
@@ -18,7 +19,7 @@ import java.util.List;
 public abstract class Property<T extends RadComponent, V> implements IProperty {
   public static final Property[] EMPTY_ARRAY=new Property[]{};
 
-  private static final Logger LOG = Logger.getInstance("#com.intellij.uiDesigner.propertyInspector.Property");
+  private static final Logger LOG = Logger.getInstance(Property.class);
 
   /**
    * Parent property
@@ -39,7 +40,7 @@ public abstract class Property<T extends RadComponent, V> implements IProperty {
    */
   @Override
   @NotNull
-  public final String getName() {
+  public final @NlsSafe String getName() {
     return myName;
   }
 
@@ -119,7 +120,7 @@ public abstract class Property<T extends RadComponent, V> implements IProperty {
    * @return child properties.
    * @param component
    */
-  @NotNull public Property[] getChildren(final RadComponent component) {
+  public Property @NotNull [] getChildren(final RadComponent component) {
     return EMPTY_ARRAY;
   }
 

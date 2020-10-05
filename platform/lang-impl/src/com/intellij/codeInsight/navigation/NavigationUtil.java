@@ -2,6 +2,7 @@
 
 package com.intellij.codeInsight.navigation;
 
+import com.intellij.codeInsight.CodeInsightBundle;
 import com.intellij.ide.util.DefaultPsiElementCellRenderer;
 import com.intellij.ide.util.EditSourceUtil;
 import com.intellij.ide.util.PsiElementListCellRenderer;
@@ -28,6 +29,7 @@ import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.popup.*;
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep;
+import com.intellij.openapi.util.NlsContexts.PopupTitle;
 import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.text.StringUtil;
@@ -63,55 +65,52 @@ public final class NavigationUtil {
   }
 
   @NotNull
-  public static JBPopup getPsiElementPopup(@NotNull PsiElement[] elements, String title) {
+  public static JBPopup getPsiElementPopup(PsiElement @NotNull [] elements, @PopupTitle String title) {
     return getPsiElementPopup(elements, new DefaultPsiElementCellRenderer(), title);
   }
 
   @NotNull
-  public static JBPopup getPsiElementPopup(@NotNull PsiElement[] elements,
+  public static JBPopup getPsiElementPopup(PsiElement @NotNull [] elements,
                                            @NotNull final PsiElementListCellRenderer<? super PsiElement> renderer,
-                                           final String title) {
-    return getPsiElementPopup(elements, renderer, title, new PsiElementProcessor<PsiElement>() {
-      @Override
-      public boolean execute(@NotNull final PsiElement element) {
-        Navigatable descriptor = EditSourceUtil.getDescriptor(element);
-        if (descriptor != null && descriptor.canNavigate()) {
-          descriptor.navigate(true);
-        }
-        return true;
+                                           @PopupTitle String title) {
+    return getPsiElementPopup(elements, renderer, title, element -> {
+      Navigatable descriptor = EditSourceUtil.getDescriptor(element);
+      if (descriptor != null && descriptor.canNavigate()) {
+        descriptor.navigate(true);
       }
+      return true;
     });
   }
 
   @NotNull
-  public static <T extends PsiElement> JBPopup getPsiElementPopup(@NotNull T[] elements,
-                                                                  @NotNull final PsiElementListCellRenderer<T> renderer,
-                                                                  final String title,
+  public static <T extends PsiElement> JBPopup getPsiElementPopup(T @NotNull [] elements,
+                                                                  @NotNull final PsiElementListCellRenderer<? super T> renderer,
+                                                                  @PopupTitle String title,
                                                                   @NotNull final PsiElementProcessor<? super T> processor) {
     return getPsiElementPopup(elements, renderer, title, processor, null);
   }
 
   @NotNull
-  public static <T extends PsiElement> JBPopup getPsiElementPopup(@NotNull T[] elements,
-                                                                  @NotNull final PsiElementListCellRenderer<T> renderer,
-                                                                  @Nullable final String title,
+  public static <T extends PsiElement> JBPopup getPsiElementPopup(T @NotNull [] elements,
+                                                                  @NotNull final PsiElementListCellRenderer<? super T> renderer,
+                                                                  @Nullable @PopupTitle String title,
                                                                   @NotNull final PsiElementProcessor<? super T> processor,
-                                                                  @Nullable final T selection) {
+                                                                  @Nullable final T initialSelection) {
     assert elements.length > 0 : "Attempted to show a navigation popup with zero elements";
     IPopupChooserBuilder<T> builder = JBPopupFactory.getInstance()
       .createPopupChooserBuilder(ContainerUtil.newArrayList(elements))
       .setRenderer(renderer)
       .setFont(EditorUtil.getEditorFont())
       .withHintUpdateSupply();
-    if (selection != null) {
-      builder.setSelectedValue(selection, true);
+    if (initialSelection != null) {
+      builder.setSelectedValue(initialSelection, true);
     }
     if (title != null) {
       builder.setTitle(title);
     }
     renderer.installSpeedSearch(builder, true);
 
-    JBPopup popup = builder.setItemsChosenCallback((selectedValues) -> {
+    JBPopup popup = builder.setItemsChosenCallback(selectedValues -> {
       for (T element : selectedValues) {
         if (element != null) {
           processor.execute(element);
@@ -120,7 +119,7 @@ public final class NavigationUtil {
     }).createPopup();
 
     if (builder instanceof PopupChooserBuilder) {
-      JScrollPane pane = ((PopupChooserBuilder)builder).getScrollPane();
+      JScrollPane pane = ((PopupChooserBuilder<?>)builder).getScrollPane();
       pane.setBorder(null);
       pane.setViewportBorder(null);
     }
@@ -234,7 +233,7 @@ public final class NavigationUtil {
       if (!((MarkupModelEx)model).processRangeHighlightersOverlappingWith(range.getStartOffset(), range.getEndOffset(),
                                                                           highlighter -> {
                                                                             if (highlighter.isValid() && highlighter.getTargetArea() == HighlighterTargetArea.LINES_IN_RANGE) {
-                                                                              TextAttributes textAttributes = highlighter.getTextAttributes();
+                                                                              TextAttributes textAttributes = highlighter.getTextAttributes(editor.getColorsScheme());
                                                                               if (textAttributes != null) {
                                                                                 Color color = textAttributes.getBackgroundColor();
                                                                                 return !(color != null && color.getBlue() > 128 && color.getRed() < 128 && color.getGreen() < 128);
@@ -252,21 +251,18 @@ public final class NavigationUtil {
   }
 
   @NotNull
-  public static JBPopup getRelatedItemsPopup(final List<? extends GotoRelatedItem> items, String title) {
+  public static JBPopup getRelatedItemsPopup(final List<? extends GotoRelatedItem> items, @PopupTitle String title) {
     return getRelatedItemsPopup(items, title, false);
   }
 
   /**
    * Returns navigation popup that shows list of related items from {@code items} list
-   * @param items
-   * @param title
    * @param showContainingModules Whether the popup should show additional information that aligned at the right side of the dialog.<br>
    *                              It's usually a module name or library name of corresponding navigation item.<br>
    *                              {@code false} by default
-   * @return
    */
   @NotNull
-  public static JBPopup getRelatedItemsPopup(final List<? extends GotoRelatedItem> items, String title, boolean showContainingModules) {
+  public static JBPopup getRelatedItemsPopup(final List<? extends GotoRelatedItem> items, @PopupTitle String title, boolean showContainingModules) {
     List<Object> elements = new ArrayList<>(items.size());
     //todo[nik] move presentation logic to GotoRelatedItem class
     final Map<PsiElement, GotoRelatedItem> itemsMap = new HashMap<>();
@@ -293,7 +289,7 @@ public final class NavigationUtil {
   }
 
   private static JBPopup getPsiElementPopup(final List<Object> elements, final Map<PsiElement, GotoRelatedItem> itemsMap,
-                                           final String title, final boolean showContainingModules, final Processor<Object> processor) {
+                                            final @PopupTitle String title, final boolean showContainingModules, final Processor<Object> processor) {
 
     final Ref<Boolean> hasMnemonic = Ref.create(false);
     final DefaultPsiElementCellRenderer renderer = new DefaultPsiElementCellRenderer() {
@@ -304,7 +300,7 @@ public final class NavigationUtil {
       @Override
       public String getElementText(PsiElement element) {
         String customName = itemsMap.get(element).getCustomName();
-        return (customName != null ? customName : super.getElementText(element));
+        return customName != null ? customName : super.getElementText(element);
       }
 
       @Override
@@ -382,7 +378,9 @@ public final class NavigationUtil {
           final GotoRelatedItem item = itemsMap.get(element);
           if (item != null && !StringUtil.equals(current, item.getGroup())) {
             current = item.getGroup();
-            separators.put(element, new ListSeparator(hasTitle && StringUtil.isEmpty(current) ? "Other" : current));
+            separators.put(element, new ListSeparator(
+              hasTitle && StringUtil.isEmpty(current) ? CodeInsightBundle.message("goto.related.items.separator.other") : current)
+            );
             if (!hasTitle && !StringUtil.isEmpty(current)) {
               hasTitle = true;
             }

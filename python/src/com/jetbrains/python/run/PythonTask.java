@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.run;
 
 import com.google.common.collect.Lists;
@@ -16,12 +16,14 @@ import com.intellij.execution.process.ProcessTerminatedListener;
 import com.intellij.execution.ui.ConsoleView;
 import com.intellij.ide.AppLifecycleListener;
 import com.intellij.openapi.Disposable;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.projectRoots.Sdk;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.Disposer;
+import com.intellij.openapi.util.NlsContexts.TabTitle;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
@@ -29,10 +31,12 @@ import com.intellij.util.NotNullFunction;
 import com.intellij.util.containers.ContainerUtil;
 import com.jetbrains.python.HelperPackage;
 import com.jetbrains.python.PyBundle;
+import com.jetbrains.python.PyDisposable;
 import com.jetbrains.python.buildout.BuildoutFacet;
 import com.jetbrains.python.console.PydevConsoleRunner;
 import com.jetbrains.python.sdk.PythonEnvUtil;
 import com.jetbrains.python.sdk.PythonSdkUtil;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -43,7 +47,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * TODO: Use {@link com.jetbrains.python.run.PythonRunner} instead of this class? At already supports rerun and other things
+ * TODO: Use {@link PythonRunner} instead of this class? At already supports rerun and other things
  * Base class for tasks which are run from PyCharm with results displayed in a toolwindow (manage.py, setup.py, Sphinx etc).
  *
  * @author yole
@@ -61,17 +65,17 @@ public class PythonTask {
   private HelperPackage myHelper = null;
 
   private List<String> myParameters = new ArrayList<>();
-  private final String myRunTabTitle;
+  private final @TabTitle String myRunTabTitle;
   private String myHelpId;
   private Runnable myAfterCompletion;
 
-  public PythonTask(Module module, String runTabTitle) throws ExecutionException {
+  public PythonTask(Module module, @TabTitle String runTabTitle) throws ExecutionException {
     this(module, runTabTitle, PythonSdkUtil.findPythonSdk(module));
   }
 
   @NotNull
   public static PythonTask create(@NotNull final Module module,
-                                  @NotNull final String runTabTitle,
+                                  @Nls @NotNull final String runTabTitle,
                                   @NotNull final Sdk sdk) {
     // Ctor throws checked exception which is not good, so this wrapper saves user from dumb code
     try {
@@ -82,12 +86,12 @@ public class PythonTask {
     }
   }
 
-  public PythonTask(final Module module, final String runTabTitle, @Nullable final Sdk sdk) throws ExecutionException {
+  public PythonTask(final Module module, @TabTitle String runTabTitle, @Nullable final Sdk sdk) throws ExecutionException {
     myModule = module;
     myRunTabTitle = runTabTitle;
     mySdk = sdk;
     if (mySdk == null) { // TODO: Get rid of such a weird contract
-      throw new ExecutionException("Cannot find Python interpreter for selected module");
+      throw new ExecutionException(PyBundle.message("python.task.cannot.find.python.interpreter.for.selected.module"));
     }
   }
 
@@ -234,7 +238,7 @@ public class PythonTask {
   public void run(@Nullable final Map<String, String> env, @Nullable final ConsoleView consoleView) throws ExecutionException {
     final ProcessHandler process = createProcess(env);
     final Project project = myModule.getProject();
-    stopProcessWhenAppClosed(process, project);
+    stopProcessWhenAppClosed(process);
     new RunContentExecutor(project, process)
       .withFilter(new PythonTracebackFilter(project))
       .withConsole(consoleView)
@@ -264,16 +268,16 @@ public class PythonTask {
    * Adds process listener that kills process on application shutdown.
    * Listener is removed from process stopped to prevent leak
    */
-  private void stopProcessWhenAppClosed(@NotNull final ProcessHandler process, @NotNull Project project) {
-    final Disposable disposable = Disposer.newDisposable();
-    Disposer.register(myModule, disposable);
+  private void stopProcessWhenAppClosed(@NotNull ProcessHandler process) {
+    Disposable disposable = Disposer.newDisposable();
+    Disposer.register(PyDisposable.getInstance(myModule), disposable);
     process.addProcessListener(new ProcessAdapter() {
       @Override
       public void processTerminated(@NotNull final ProcessEvent event) {
         Disposer.dispose(disposable);
       }
-    }, myModule);
-    project.getMessageBus().connect(disposable).subscribe(AppLifecycleListener.TOPIC, new AppLifecycleListener() {
+    }, PyDisposable.getInstance(myModule));
+    ApplicationManager.getApplication().getMessageBus().connect(disposable).subscribe(AppLifecycleListener.TOPIC, new AppLifecycleListener() {
       @Override
       public void appWillBeClosed(boolean isRestart) {
         process.destroyProcess();
@@ -292,6 +296,7 @@ public class PythonTask {
     final ProgressManager manager = ProgressManager.getInstance();
     final Output output;
     if (SwingUtilities.isEventDispatchThread()) {
+      assert !ApplicationManager.getApplication().isWriteAccessAllowed(): "This method can't run under write action";
       output = manager.runProcessWithProgressSynchronously(() -> getOutputInternal(), myRunTabTitle, false, myModule.getProject());
     }
     else {
@@ -301,8 +306,8 @@ public class PythonTask {
     if (exitCode == 0) {
       return output.getStdout();
     }
-    throw new ExecutionException(String.format("Error on python side. " +
-                                               "Exit code: %s, err: %s out: %s", exitCode, output.getStderr(), output.getStdout()));
+    throw new ExecutionException(PyBundle.message("dialog.message.error.on.python.side.exit.code.stderr.stdout",
+                                                  exitCode,output.getStderr(),output.getStdout()));
   }
 
   @NotNull

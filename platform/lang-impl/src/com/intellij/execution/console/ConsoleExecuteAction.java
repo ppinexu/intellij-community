@@ -16,6 +16,7 @@
 package com.intellij.execution.console;
 
 import com.intellij.codeInsight.lookup.Lookup;
+import com.intellij.codeInsight.lookup.LookupFocusDegree;
 import com.intellij.codeInsight.lookup.LookupManager;
 import com.intellij.codeInsight.lookup.impl.LookupImpl;
 import com.intellij.execution.ui.ConsoleViewContentType;
@@ -40,27 +41,27 @@ public class ConsoleExecuteAction extends DumbAwareAction {
 
   private final LanguageConsoleView myConsoleView;
   final ConsoleExecuteActionHandler myExecuteActionHandler;
-  private final Condition<LanguageConsoleView> myEnabledCondition;
+  private final Condition<? super LanguageConsoleView> myEnabledCondition;
 
   public ConsoleExecuteAction(@NotNull LanguageConsoleView console, @NotNull BaseConsoleExecuteActionHandler executeActionHandler) {
     this(console, executeActionHandler, CONSOLE_EXECUTE_ACTION_ID, Conditions.alwaysTrue());
   }
 
-  ConsoleExecuteAction(@NotNull LanguageConsoleView console, @NotNull ConsoleExecuteActionHandler executeActionHandler, @Nullable Condition<LanguageConsoleView> enabledCondition) {
+  ConsoleExecuteAction(@NotNull LanguageConsoleView console, @NotNull ConsoleExecuteActionHandler executeActionHandler, @Nullable Condition<? super LanguageConsoleView> enabledCondition) {
     this(console, executeActionHandler, CONSOLE_EXECUTE_ACTION_ID, enabledCondition);
   }
 
   public ConsoleExecuteAction(@NotNull LanguageConsoleView console,
                               @NotNull BaseConsoleExecuteActionHandler executeActionHandler,
-                              @Nullable Condition<LanguageConsoleView> enabledCondition) {
+                              @Nullable Condition<? super LanguageConsoleView> enabledCondition) {
     this(console, executeActionHandler, CONSOLE_EXECUTE_ACTION_ID, enabledCondition);
   }
 
   public ConsoleExecuteAction(@NotNull LanguageConsoleView consoleView,
                                @NotNull ConsoleExecuteActionHandler executeActionHandler,
                                @NotNull String emptyExecuteActionId,
-                               @Nullable Condition<LanguageConsoleView> enabledCondition) {
-    super(null, null, AllIcons.Actions.Execute);
+                               @Nullable Condition<? super LanguageConsoleView> enabledCondition) {
+    super(AllIcons.Actions.Execute);
 
     myConsoleView = consoleView;
     myExecuteActionHandler = executeActionHandler;
@@ -78,7 +79,7 @@ public class ConsoleExecuteAction extends DumbAwareAction {
       Lookup lookup = LookupManager.getActiveLookup(editor);
       // we should check getCurrentItem() also - fast typing could produce outdated lookup, such lookup reports isCompletion() true
       enabled = lookup == null || !lookup.isCompletion() || lookup.getCurrentItem() == null ||
-                lookup instanceof LookupImpl && ((LookupImpl)lookup).getFocusDegree() == LookupImpl.FocusDegree.UNFOCUSED;
+                lookup instanceof LookupImpl && ((LookupImpl)lookup).getLookupFocusDegree() == LookupFocusDegree.UNFOCUSED;
     }
 
     e.getPresentation().setEnabled(enabled);

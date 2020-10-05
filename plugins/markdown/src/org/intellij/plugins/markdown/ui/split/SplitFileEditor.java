@@ -1,3 +1,4 @@
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.intellij.plugins.markdown.ui.split;
 
 import com.intellij.codeHighlighting.BackgroundEditorHighlighter;
@@ -14,6 +15,7 @@ import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.UserDataHolderBase;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.ui.JBSplitter;
 import com.intellij.util.ui.JBEmptyBorder;
@@ -28,6 +30,8 @@ import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.util.HashMap;
 import java.util.Map;
+
+import static com.intellij.openapi.fileEditor.TextEditorWithPreview.DEFAULT_LAYOUT_FOR_FILE;
 
 public abstract class SplitFileEditor<E1 extends FileEditor, E2 extends FileEditor> extends UserDataHolderBase implements FileEditor {
   public static final Key<SplitFileEditor> PARENT_SPLIT_KEY = Key.create("parentSplit");
@@ -55,6 +59,7 @@ public abstract class SplitFileEditor<E1 extends FileEditor, E2 extends FileEdit
     myMainEditor = mainEditor;
     mySecondEditor = secondEditor;
 
+    adjustDefaultLayout(mainEditor);
     myComponent = createComponent();
 
     if (myMainEditor instanceof TextEditor) {
@@ -90,6 +95,39 @@ public abstract class SplitFileEditor<E1 extends FileEditor, E2 extends FileEdit
       .subscribe(MarkdownApplicationSettings.SettingsChangedListener.TOPIC, settingsChangedListener);
   }
 
+  private void adjustDefaultLayout(E1 editor) {
+    TextEditorWithPreview.Layout layout = getAndResetPredefinedLayoutForEditor(editor);
+    if (layout != null) {
+      switch (layout) {
+        case SHOW_EDITOR:
+          mySplitEditorLayout = SplitEditorLayout.FIRST;
+          break;
+        case SHOW_PREVIEW:
+          mySplitEditorLayout = SplitEditorLayout.SECOND;
+          break;
+        case SHOW_EDITOR_AND_PREVIEW:
+          mySplitEditorLayout = SplitEditorLayout.SPLIT;
+          break;
+      }
+    }
+  }
+
+  //todo: Refactor Markdown editor and make it a subclass of TextEditorWithPreview.
+  //      Move this method to TextEditorWithPreview.
+  @Nullable
+  private static TextEditorWithPreview.Layout getAndResetPredefinedLayoutForEditor(FileEditor editor) {
+    VirtualFile file = editor.getFile();
+    if (file != null) {
+      TextEditorWithPreview.Layout layout = file.getUserData(DEFAULT_LAYOUT_FOR_FILE);
+      if (layout != null) {
+        file.putUserData(DEFAULT_LAYOUT_FOR_FILE, null); //burn after reading
+        return layout;
+      }
+    }
+
+    return null;
+  }
+
   private void triggerSplitOrientationChange(boolean isVerticalSplit) {
     if (myVerticalSplitOption == isVerticalSplit) {
       return;
@@ -112,7 +150,6 @@ public abstract class SplitFileEditor<E1 extends FileEditor, E2 extends FileEdit
     mySplitter.setDividerWidth(3);
 
     myToolbarWrapper = createMarkdownToolbarWrapper(mySplitter);
-    Disposer.register(this, myToolbarWrapper);
 
     final JPanel result = new JPanel(new BorderLayout());
     result.add(myToolbarWrapper, BorderLayout.NORTH);
@@ -145,7 +182,6 @@ public abstract class SplitFileEditor<E1 extends FileEditor, E2 extends FileEdit
     final ActionGroup group = ((ActionGroup)actionManager.getAction(groupId));
     final ActionToolbarImpl editorToolbar =
       ((ActionToolbarImpl)actionManager.createActionToolbar(ActionPlaces.EDITOR_TOOLBAR, group, true));
-    editorToolbar.setOpaque(false);
     editorToolbar.setBorder(new JBEmptyBorder(0, 2, 0, 2));
 
     return editorToolbar;
@@ -343,7 +379,7 @@ public abstract class SplitFileEditor<E1 extends FileEditor, E2 extends FileEdit
     }
   }
 
-  private class DoublingEventListenerDelegate implements PropertyChangeListener {
+  private final class DoublingEventListenerDelegate implements PropertyChangeListener {
     @NotNull
     private final PropertyChangeListener myDelegate;
 
@@ -406,13 +442,12 @@ public abstract class SplitFileEditor<E1 extends FileEditor, E2 extends FileEdit
     }
 
     public String getPresentationText() {
-      //noinspection ConstantConditions
-      return StringUtil.capitalize(StringUtil.substringAfter(presentationName, "Show "));
+      return StringUtil.capitalize(presentationName);
     }
 
     @Override
     public String toString() {
-      return presentationName;
+      return MarkdownBundle.message("markdown.layout.show", presentationName);
     }
   }
 }

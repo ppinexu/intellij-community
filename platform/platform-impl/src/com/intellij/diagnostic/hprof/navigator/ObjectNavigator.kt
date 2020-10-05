@@ -15,13 +15,13 @@
  */
 package com.intellij.diagnostic.hprof.navigator
 
-import com.intellij.diagnostic.hprof.parser.HProfEventBasedParser
-import com.intellij.diagnostic.hprof.visitors.CollectRootReasonsVisitor
-import com.intellij.diagnostic.hprof.visitors.CompositeVisitor
-import com.intellij.diagnostic.hprof.visitors.CreateAuxiliaryFilesVisitor
 import com.intellij.diagnostic.hprof.classstore.ClassDefinition
 import com.intellij.diagnostic.hprof.classstore.ClassStore
-import gnu.trove.TLongArrayList
+import com.intellij.diagnostic.hprof.classstore.HProfMetadata
+import com.intellij.diagnostic.hprof.parser.HProfEventBasedParser
+import com.intellij.diagnostic.hprof.visitors.CreateAuxiliaryFilesVisitor
+import it.unimi.dsi.fastutil.longs.LongList
+import org.jetbrains.annotations.NonNls
 import java.nio.channels.FileChannel
 
 abstract class ObjectNavigator(val classStore: ClassStore, val instanceCount: Long) {
@@ -32,70 +32,74 @@ abstract class ObjectNavigator(val classStore: ClassStore, val instanceCount: Lo
     NO_REFERENCES
   }
 
+  data class RootObject(val id: Long, val reason: RootReason)
+
   abstract val id: Long
 
-  abstract fun createRootsIterator(): Iterator<Long>
+  abstract fun createRootsIterator(): Iterator<RootObject>
 
   abstract fun goTo(id: Long, referenceResolution: ReferenceResolution = ReferenceResolution.ONLY_STRONG_REFERENCES)
 
   abstract fun getClass(): ClassDefinition
 
-  abstract fun getReferencesCopy(): TLongArrayList
-  abstract fun copyReferencesTo(outReferences: TLongArrayList)
+  abstract fun getReferencesCopy(): LongList
+  abstract fun copyReferencesTo(outReferences: LongList)
 
   abstract fun getClassForObjectId(id: Long): ClassDefinition
   abstract fun getRootReasonForObjectId(id: Long): RootReason?
 
   abstract fun getObjectSize(): Int
 
-  fun goToInstanceField(className: String?, fieldName: String) {
+  abstract fun getSoftReferenceId(): Long
+  abstract fun getWeakReferenceId(): Long
+  abstract fun getSoftWeakReferenceIndex(): Int
+
+  fun goToInstanceField(@NonNls className: String?, @NonNls fieldName: String) {
     val objectId = getInstanceFieldObjectId(className, fieldName)
     goTo(objectId, ReferenceResolution.ALL_REFERENCES)
   }
 
-  fun getInstanceFieldObjectId(className: String?, name: String): Long {
+  fun getInstanceFieldObjectId(@NonNls className: String?, @NonNls name: String): Long {
     val refs = getReferencesCopy()
     className?.let {
-      assert(className == getClass().name) { "Expected $className, got ${getClass().name}" }
+      assert(className == getClass().name.substringBeforeLast('!')) { "Expected $className, got ${getClass().name}" }
     }
     val indexOfField = getClass().allRefFieldNames(classStore).indexOfFirst { it == name }
-    return refs[indexOfField]
+    return refs.getLong(indexOfField)
   }
 
-  fun goToStaticField(className: String, fieldName: String) {
+  fun goToStaticField(@NonNls className: String, @NonNls fieldName: String) {
     val objectId = getStaticFieldObjectId(className, fieldName)
     goTo(objectId, ReferenceResolution.ALL_REFERENCES)
   }
 
   private fun getStaticFieldObjectId(className: String, fieldName: String) =
-    classStore[className].staticFields.first { it.name == fieldName }.objectId
-
+    classStore[className].objectStaticFields.first { it.name == fieldName }.value
 
   companion object {
     fun createOnAuxiliaryFiles(parser: HProfEventBasedParser,
                                auxOffsetsChannel: FileChannel,
                                auxChannel: FileChannel,
-                               classStore: ClassStore,
+                               hprofMetadata: HProfMetadata,
                                instanceCount: Long): ObjectNavigator {
-      val collectRootReasonsVisitor = CollectRootReasonsVisitor()
-      val createAuxiliaryFilesVisitor = CreateAuxiliaryFilesVisitor(auxOffsetsChannel, auxChannel, classStore, parser)
+      val createAuxiliaryFilesVisitor = CreateAuxiliaryFilesVisitor(auxOffsetsChannel, auxChannel, hprofMetadata.classStore, parser)
 
-      val compositeVisitor = CompositeVisitor(
-        collectRootReasonsVisitor,
-        createAuxiliaryFilesVisitor
-      )
-      parser.accept(compositeVisitor, "roots/auxFiles")
-
-      val roots = collectRootReasonsVisitor.roots
+      parser.accept(createAuxiliaryFilesVisitor, "auxFiles")
 
       val auxBuffer = auxChannel.map(FileChannel.MapMode.READ_ONLY, 0, auxChannel.size())
       val auxOffsetsBuffer =
         auxOffsetsChannel.map(FileChannel.MapMode.READ_ONLY, 0, auxOffsetsChannel.size())
 
-      return ObjectNavigatorOnAuxFiles(roots, auxOffsetsBuffer, auxBuffer, classStore, instanceCount)
+      return ObjectNavigatorOnAuxFiles(hprofMetadata.roots, auxOffsetsBuffer, auxBuffer, hprofMetadata.classStore, instanceCount,
+                                       parser.idSize)
     }
   }
 
   abstract fun isNull(): Boolean
+
+  // Some objects may have additional data (varies by type). Only available when referenceResolution != NO_REFERENCES.
+  abstract fun getExtraData(): Int
+
+  abstract fun getStringInstanceFieldValue(): String?
 }
 

@@ -43,12 +43,8 @@ public class CopyPasteIndentProcessor extends CopyPastePostProcessor<IndentTrans
   }
 
   private static boolean acceptFileType(FileType fileType) {
-    for(PreserveIndentOnPasteBean bean: PreserveIndentOnPasteBean.EP_NAME.getExtensionList()) {
-      if (fileType.getName().equals(bean.fileType)) {
-        return true;
-      }
-    }
-    return false;
+    return PreserveIndentOnPasteBean.EP_NAME.getExtensionList().stream()
+      .anyMatch(bean -> fileType.getName().equals(bean.fileType));
   }
 
   @NotNull
@@ -163,4 +159,8 @@ public class CopyPasteIndentProcessor extends CopyPastePostProcessor<IndentTrans
     return document.getLineStartOffset(line);
   }
 
+  @Override
+  public boolean requiresAllDocumentsToBeCommitted(@NotNull Editor editor, @NotNull Project project) {
+    return false;
+  }
 }

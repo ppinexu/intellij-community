@@ -1,8 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
-
-/*
- * @author max
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.impl.search;
 
 import com.intellij.openapi.application.ReadAction;
@@ -22,7 +18,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.Collection;
 
 public class AnnotatedPackagesSearcher implements QueryExecutor<PsiPackage, AnnotatedPackagesSearch.Parameters> {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.psi.impl.search.AnnotatedPackagesSearcher");
+  private static final Logger LOG = Logger.getInstance(AnnotatedPackagesSearcher.class);
 
   @Override
   public boolean execute(@NotNull final AnnotatedPackagesSearch.Parameters p, @NotNull final Processor<? super PsiPackage> consumer) {

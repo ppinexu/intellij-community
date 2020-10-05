@@ -10,10 +10,8 @@ import org.jetbrains.jps.service.JpsServiceManager;
 
 import java.util.concurrent.ExecutorService;
 
-/**
- * @author nik
- */
 public abstract class JdkVersionDetector {
+
   public static JdkVersionDetector getInstance() {
     return JpsServiceManager.getInstance().getService(JdkVersionDetector.class);
   }
@@ -24,21 +22,48 @@ public abstract class JdkVersionDetector {
   @Nullable
   public abstract JdkVersionInfo detectJdkVersionInfo(@NotNull String homePath, @NotNull ExecutorService actionRunner);
 
+
   public static final class JdkVersionInfo {
+
     public final JavaVersion version;
     public final Bitness bitness;
+    public final @Nullable String vendorPrefix;
+    public final @Nullable String displayName;
 
     public JdkVersionInfo(@NotNull JavaVersion version, @NotNull Bitness bitness) {
       this.version = version;
       this.bitness = bitness;
+      this.vendorPrefix = null;
+      this.displayName = null;
+    }
+
+    public JdkVersionInfo(@NotNull JavaVersion version, @NotNull Bitness bitness, @Nullable String vendorPrefix, @Nullable String displayName) {
+      this.version = version;
+      this.bitness = bitness;
+      this.vendorPrefix = vendorPrefix;
+      this.displayName = displayName;
+    }
+
+    @NotNull
+    public String suggestedName() {
+      String f = version.toFeatureString();
+      return vendorPrefix != null ? vendorPrefix + '-' + f : f;
     }
 
     @Override
     public String toString() {
       return version + " " + bitness;
     }
+
+    public String displayVersionString() {
+      String s = "version " + version;
+      String d = displayName;
+      if (d != null) s = d + ' ' + s;
+      return s;
+    }
   }
 
+  @NotNull
   public static String formatVersionString(@NotNull JavaVersion version) {
     return "java version \"" + version + '"';
   }

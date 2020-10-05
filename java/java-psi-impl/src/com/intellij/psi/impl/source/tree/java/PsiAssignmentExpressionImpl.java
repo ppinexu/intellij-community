@@ -16,6 +16,7 @@
 package com.intellij.psi.impl.source.tree.java;
 
 import com.intellij.lang.ASTNode;
+import com.intellij.lang.java.parser.ExpressionParser;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.source.tree.ChildRole;
@@ -28,7 +29,7 @@ import com.intellij.psi.util.PsiUtil;
 import org.jetbrains.annotations.NotNull;
 
 public class PsiAssignmentExpressionImpl extends ExpressionPsiElement implements PsiAssignmentExpression {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.psi.impl.source.tree.java.PsiAssignmentExpressionImpl");
+  private static final Logger LOG = Logger.getInstance(PsiAssignmentExpressionImpl.class);
 
   public PsiAssignmentExpressionImpl() {
     super(JavaElementType.ASSIGNMENT_EXPRESSION);
@@ -103,10 +104,7 @@ public class PsiAssignmentExpressionImpl extends ExpressionPsiElement implements
     }
   }
 
-  private static final TokenSet OUR_OPERATIONS_BIT_SET = TokenSet.create(JavaTokenType.EQ, JavaTokenType.ASTERISKEQ, JavaTokenType.DIVEQ,
-                                                                         JavaTokenType.PERCEQ, JavaTokenType.PLUSEQ, JavaTokenType.MINUSEQ,
-                                                                         JavaTokenType.LTLTEQ, JavaTokenType.GTGTEQ, JavaTokenType.GTGTGTEQ,
-                                                                         JavaTokenType.ANDEQ, JavaTokenType.OREQ, JavaTokenType.XOREQ);
+  private static final TokenSet OUR_OPERATIONS_BIT_SET = ExpressionParser.ASSIGNMENT_OPS;
 
   @Override
   public void accept(@NotNull PsiElementVisitor visitor) {

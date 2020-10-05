@@ -67,8 +67,14 @@ public class StringLiteralCopyPasteProcessor implements CopyPastePreProcessor {
         buffer.append(fragment);
       }
       else {
-        textWasChanged = true;
-        buffer.append(unescape(fragment, element));
+        String unescaped = unescape(fragment, element);
+        if (unescaped != null) {
+          textWasChanged = true;
+          buffer.append(unescaped);
+        }
+        else {
+          buffer.append(fragment);
+        }
       }
       int blockSelectionPadding = deducedBlockSelectionWidth - (fileEndOffset - fileStartOffset);
       for (int j = 0; j < blockSelectionPadding; j++) {
@@ -94,7 +100,7 @@ public class StringLiteralCopyPasteProcessor implements CopyPastePreProcessor {
     }
   }
 
-  @NotNull
+  @Nullable
   protected String unescape(String text, PsiElement token) {
     return unescapeStringCharacters(text);
   }
@@ -244,7 +250,7 @@ public class StringLiteralCopyPasteProcessor implements CopyPastePreProcessor {
   @NotNull
   protected String escapeCharCharacters(@NotNull String s, @NotNull PsiElement token) {
     StringBuilder buffer = new StringBuilder();
-    StringUtil.escapeStringCharacters(s.length(), s, isStringLiteral(token) ? "\"" : "\'", buffer);
+    StringUtil.escapeStringCharacters(s.length(), s, isStringLiteral(token) ? "\"" : "'", buffer);
     return buffer.toString();
   }
 

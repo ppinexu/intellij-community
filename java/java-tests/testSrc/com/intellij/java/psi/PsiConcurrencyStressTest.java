@@ -1,8 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
-
-/*
- * @author max
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.java.psi;
 
 import com.intellij.codeInsight.daemon.DaemonAnalyzerTestCase;
@@ -152,11 +148,11 @@ public class PsiConcurrencyStressTest extends DaemonAnalyzerTestCase {
         mark("h");
         aClass.accept(new PsiRecursiveElementVisitor() {
           @Override
-          public void visitElement(final PsiElement element) {
+          public void visitElement(@NotNull final PsiElement element) {
             super.visitElement(element);
 
             final HighlightInfoHolder infoHolder = new HighlightInfoHolder(myFile);
-            for (HighlightVisitor visitor : HighlightVisitor.EP_HIGHLIGHT_VISITOR.getExtensions(getProject())) {
+            for (HighlightVisitor visitor : HighlightVisitor.EP_HIGHLIGHT_VISITOR.getExtensionList(getProject())) {
               HighlightVisitor v = visitor.clone(); // to avoid race for com.intellij.codeInsight.daemon.impl.DefaultHighlightVisitor.myAnnotationHolder
               v.analyze(myFile, true, infoHolder, () -> v.visit(element));
             }
@@ -171,10 +167,5 @@ public class PsiConcurrencyStressTest extends DaemonAnalyzerTestCase {
         }
         break;
     }
-  }
-
-  @Override
-  protected void invokeTestRunnable(@NotNull final Runnable runnable) {
-    runnable.run();
   }
 }

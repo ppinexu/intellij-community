@@ -1,6 +1,7 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.maven.utils.library;
 
+import com.intellij.ide.JavaUiBundle;
 import com.intellij.jarRepository.JarRepositoryManager;
 import com.intellij.jarRepository.RepositoryLibraryType;
 import com.intellij.notification.Notification;
@@ -33,8 +34,8 @@ import org.jetbrains.concurrency.Promises;
 import java.util.*;
 import java.util.stream.Collectors;
 
-public class RepositoryUtils {
-  private static final Logger LOG = Logger.getInstance("#org.jetbrains.idea.maven.utils.library.RepositoryUtils");
+public final class RepositoryUtils {
+  private static final Logger LOG = Logger.getInstance(RepositoryUtils.class);
 
   public static boolean libraryHasSources(@Nullable Library library) {
     return library != null && library.getUrls(OrderRootType.SOURCES).length > 0;
@@ -75,7 +76,7 @@ public class RepositoryUtils {
       final Integer count = counts.get(root);
       counts.put(root, count != null ? count + 1 : 1);
     }
-    return Collections.max(counts.entrySet(), Comparator.comparing(Map.Entry::getValue)).getKey();
+    return Collections.max(counts.entrySet(), Map.Entry.comparingByValue()).getKey();
   }
 
   public static Promise<List<OrderRoot>> loadDependenciesToLibrary(@NotNull final Project project,
@@ -96,8 +97,9 @@ public class RepositoryUtils {
       ApplicationManager.getApplication().invokeLater(
         roots == null || roots.isEmpty() ?
         () -> {
-          String message = "No files were downloaded for " + properties.getMavenId();
-          Notifications.Bus.notify(new Notification("Repository", "Repository library synchronization",
+          String message = JavaUiBundle.message("notification.content.no.files.were.downloaded", properties.getMavenId());
+          Notifications.Bus.notify(new Notification("Repository", JavaUiBundle.message(
+            "notification.title.repository.library.synchronization"),
                                                     message, NotificationType.ERROR), project);
           promise.setError(message);
         } :

@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.designer.propertyTable;
 
 import com.intellij.designer.model.ErrorInfo;
@@ -6,6 +6,7 @@ import com.intellij.designer.model.PropertiesContainer;
 import com.intellij.designer.model.Property;
 import com.intellij.designer.model.PropertyContext;
 import com.intellij.designer.propertyTable.renderers.LabelPropertyRenderer;
+import com.intellij.ide.IdeBundle;
 import com.intellij.ide.ui.search.SearchUtil;
 import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.openapi.application.ApplicationManager;
@@ -21,6 +22,7 @@ import com.intellij.openapi.vcs.FileStatus;
 import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.openapi.wm.ex.IdeFocusTraversalPolicy;
 import com.intellij.ui.*;
+import com.intellij.ui.render.RenderingUtil;
 import com.intellij.ui.table.JBTable;
 import com.intellij.util.ThrowableRunnable;
 import com.intellij.util.ui.UIUtil;
@@ -39,7 +41,6 @@ import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.text.MessageFormat;
 import java.util.List;
 import java.util.*;
 
@@ -47,7 +48,7 @@ import java.util.*;
  * @author Alexander Lobas
  */
 public abstract class PropertyTable extends JBTable {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.designer.propertyTable.PropertyTable");
+  private static final Logger LOG = Logger.getInstance(PropertyTable.class);
   private static final Comparator<String> GROUP_COMPARATOR = (o1, o2) -> StringUtil.compare(o1, o2, true);
   private static final Comparator<Property> PROPERTY_COMPARATOR = (o1, o2) -> StringUtil.compare(o1.getName(), o2.getName(), true);
 
@@ -88,6 +89,8 @@ public abstract class PropertyTable extends JBTable {
     setRowSelectionAllowed(true);
 
     addMouseListener(new MouseTableListener());
+
+    putClientProperty(RenderingUtil.PAINT_HOVERED_BACKGROUND, false);
 
     mySpeedSearch = new TableSpeedSearch(this, (object, cell) -> {
       if (cell.column != 0) return null;
@@ -314,7 +317,7 @@ public abstract class PropertyTable extends JBTable {
   private void sortPropertiesAndCreateGroups(List<Property> rootProperties) {
     if (!mySorted && !myShowGroups) return;
 
-    Collections.sort(rootProperties, (o1, o2) -> {
+    rootProperties.sort((o1, o2) -> {
       if (o1.getParent() != null || o2.getParent() != null) {
         if (o1.getParent() == o2) return -1;
         if (o2.getParent() == o1) return 1;
@@ -509,7 +512,7 @@ public abstract class PropertyTable extends JBTable {
 
     for (int i = 0; i < size; i++) {
       Property nextProperty = properties.get(i);
-      if (Comparing.equal(nextProperty.getGroup(), property.getGroup()) && name.equals(nextProperty.getName())) {
+      if (Objects.equals(nextProperty.getGroup(), property.getGroup()) && name.equals(nextProperty.getName())) {
         return i;
       }
     }
@@ -837,11 +840,11 @@ public abstract class PropertyTable extends JBTable {
     String message = cause == null ? e.getMessage() : cause.getMessage();
 
     if (message == null || message.length() == 0) {
-      message = "No message";
+      message = IdeBundle.message("dialog.message.no.message");
     }
 
-    Messages.showMessageDialog(MessageFormat.format("Error setting value: {0}", message),
-                               "Invalid Input",
+    Messages.showMessageDialog(IdeBundle.message("dialog.message.error.setting.value", message),
+                               IdeBundle.message("dialog.title.invalid.input"),
                                Messages.getErrorIcon());
   }
 
@@ -857,7 +860,7 @@ public abstract class PropertyTable extends JBTable {
    *
    * @see javax.swing.plaf.basic.BasicTableUI
    */
-  private class MySelectNextPreviousRowAction extends AbstractAction {
+  private final class MySelectNextPreviousRowAction extends AbstractAction {
     private final boolean selectNext;
 
     private MySelectNextPreviousRowAction(boolean selectNext) {
@@ -1136,7 +1139,7 @@ public abstract class PropertyTable extends JBTable {
         LOG.debug(e);
         SimpleColoredComponent errComponent = new SimpleColoredComponent();
         errComponent
-          .append(MessageFormat.format("Error getting value: {0}", e.getMessage()), SimpleTextAttributes.ERROR_ATTRIBUTES);
+          .append(IdeBundle.message("dialog.text.error.getting.value", e.getMessage()), SimpleTextAttributes.ERROR_ATTRIBUTES);
         return errComponent;
       }
       finally {
@@ -1169,7 +1172,7 @@ public abstract class PropertyTable extends JBTable {
   @NotNull
   protected abstract TextAttributesKey getErrorAttributes(@NotNull HighlightSeverity severity);
 
-  private class PropertyCellRenderer implements TableCellRenderer {
+  private final class PropertyCellRenderer implements TableCellRenderer {
     private final ColoredTableCellRenderer myCellRenderer;
     private final ColoredTableCellRenderer myGroupRenderer;
 
@@ -1181,7 +1184,7 @@ public abstract class PropertyTable extends JBTable {
 
 
         @Override
-        protected void customizeCellRenderer(JTable table, Object value, boolean selected, boolean hasFocus, int row, int column) {
+        protected void customizeCellRenderer(@NotNull JTable table, Object value, boolean selected, boolean hasFocus, int row, int column) {
           super.customizeCellRenderer(table, value, selected, hasFocus, row, column);
           mySelected = selected;
           myDrawTopLine = row > 0;
@@ -1301,7 +1304,7 @@ public abstract class PropertyTable extends JBTable {
         }
         catch (Exception e) {
           LOG.debug(e);
-          renderer.append(MessageFormat.format("Error getting value: {0}", e.getMessage()), SimpleTextAttributes.ERROR_ATTRIBUTES);
+          renderer.append(IdeBundle.message("dialog.text.error.getting.value", e.getMessage()), SimpleTextAttributes.ERROR_ATTRIBUTES);
           return renderer;
         }
       }
@@ -1309,7 +1312,7 @@ public abstract class PropertyTable extends JBTable {
 
     private class MyCellRenderer extends ColoredTableCellRenderer {
       @Override
-      protected void customizeCellRenderer(JTable table, Object value, boolean selected, boolean hasFocus, int row, int column) {
+      protected void customizeCellRenderer(@NotNull JTable table, Object value, boolean selected, boolean hasFocus, int row, int column) {
         setPaintFocusBorder(false);
         setFocusBorderAroundIcon(true);
       }

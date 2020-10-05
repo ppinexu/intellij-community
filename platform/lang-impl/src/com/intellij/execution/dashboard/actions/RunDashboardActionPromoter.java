@@ -4,17 +4,18 @@ package com.intellij.execution.dashboard.actions;
 import com.intellij.openapi.actionSystem.ActionPromoter;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.DataContext;
-import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.SmartList;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.Collections;
 import java.util.List;
 
 public class RunDashboardActionPromoter implements ActionPromoter {
   @Override
-  public List<AnAction> promote(List<AnAction> actions, DataContext context) {
+  public List<AnAction> promote(@NotNull List<AnAction> actions, @NotNull DataContext context) {
     for (AnAction action : actions) {
       if (action instanceof StopAction) {
-        return ContainerUtil.newSmartList(action);
+        return new SmartList<>(action);
       }
     }
     return Collections.emptyList();

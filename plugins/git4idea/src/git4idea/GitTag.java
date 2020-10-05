@@ -6,12 +6,13 @@ import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.containers.ContainerUtil;
 import git4idea.branch.GitBranchUtil;
+import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 
 public class GitTag extends GitReference {
-  public static final String REFS_TAGS_PREFIX = "refs/tags/";
+  public static final @NonNls String REFS_TAGS_PREFIX = "refs/tags/";
 
   public GitTag(@NotNull String name) {
     super(name);
@@ -23,6 +24,10 @@ public class GitTag extends GitReference {
     return REFS_TAGS_PREFIX + myName;
   }
 
+  /**
+   * @deprecated Use {@link GitBranchUtil#getAllTags(Project, VirtualFile)}
+   */
+  @Deprecated
   @NotNull
   public static List<GitTag> list(@NotNull Project project, @NotNull VirtualFile root) throws VcsException {
     return ContainerUtil.map(GitBranchUtil.getAllTags(project, root), GitTag::new);

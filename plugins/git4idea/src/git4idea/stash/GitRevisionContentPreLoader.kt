@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package git4idea.stash
 
 import com.intellij.openapi.diagnostic.Attachment
@@ -21,7 +21,6 @@ import git4idea.commands.GitHandlerInputProcessorUtil
 import git4idea.index.GitIndexUtil
 import git4idea.repo.GitRepositoryManager
 import git4idea.util.GitFileUtils.addTextConvParameters
-import org.apache.commons.lang.ArrayUtils
 
 
 private val LOG = logger<GitRevisionContentPreLoader>()
@@ -31,16 +30,17 @@ class GitRevisionContentPreLoader(val project: Project) {
   private val RECORD_SEPARATOR = (1..10).map { "\u0001\u0002\u0003".random() }.joinToString("")
 
   fun preload(root: VirtualFile, changes: Collection<Change>) {
-    val toPreload = mutableListOf<Info>()
+    val toPreload = mutableMapOf<FilePath, Change>()
     val head = GitChangeUtils.resolveReference(project, root, "HEAD")
     for (change in changes) {
       val beforeRevision = change.beforeRevision
       if (beforeRevision !is GitContentRevision || beforeRevision.getRevisionNumber() != head) {
-        LOG.info("Skipping change $change because of ${beforeRevision?.revisionNumber?.asString()}")
+        LOG.info("Skipping change $change because beforeRevision is '${beforeRevision?.revisionNumber?.toString()}'")
         continue
       }
 
-      toPreload.add(Info(beforeRevision.getFile(), change))
+      val path = beforeRevision.getFile()
+      toPreload[path] = change
     }
     if (toPreload.isEmpty()) {
       return
@@ -55,7 +55,7 @@ class GitRevisionContentPreLoader(val project: Project) {
     h.endOptions()
     h.setInputProcessor(GitHandlerInputProcessorUtil.writeLines(
       // we need to pass '<hash> <path>', otherwise --filters parameter doesn't work
-      hashesAndPaths.map { "${it.hash} ${it.path}" },
+      hashesAndPaths.map { "${it.hash} ${it.relativePath}" },
       UTF8_CHARSET))
 
     val output: ByteArray
@@ -67,20 +67,20 @@ class GitRevisionContentPreLoader(val project: Project) {
       return
     }
 
-    val split = splitOutput(output, hashesAndPaths.map { it.hash }) ?: return
+    val split = splitOutput(output, hashesAndPaths) ?: return
 
-    toPreload.forEachIndexed { index, info ->
-      val oldBeforeRevision = info.change.beforeRevision as GitContentRevision
-      val content = split[index]
+    toPreload.forEach { (path, change) ->
+      val oldBeforeRevision = change.beforeRevision as GitContentRevision
+      val content = split[path]
       val cache = ProjectLevelVcsManager.getInstance(project).contentRevisionCache
       cache.putIntoConstantCache(oldBeforeRevision.file, oldBeforeRevision.revisionNumber, GitVcs.getKey(), content)
     }
   }
 
-  private fun calcBlobHashesWithPaths(root: VirtualFile, toPreload: List<Info>): List<HashAndPath>? {
+  private fun calcBlobHashesWithPaths(root: VirtualFile, toPreload: Map<FilePath, Change>): List<HashAndPath>? {
     val repository = GitRepositoryManager.getInstance(project).getRepositoryForRoot(root)!!
     val trees: List<GitIndexUtil.StagedFileOrDirectory>
-    trees = GitIndexUtil.listTree(repository, toPreload.map { it.filePath }, HEAD)
+    trees = GitIndexUtil.listTree(repository, toPreload.keys, HEAD)
     if (trees.size != toPreload.size) {
       LOG.warn("Incorrect number of trees ${trees.size} != ${toPreload.size}")
       return emptyList()
@@ -98,40 +98,37 @@ class GitRevisionContentPreLoader(val project: Project) {
         return null
       }
 
-      HashAndPath(tree.blobHash, relativePath)
+      HashAndPath(tree.blobHash, tree.path, relativePath)
     }
   }
 
-  private fun splitOutput(output: ByteArray,
-                          hashes: List<String>): List<ByteArray>? {
-    val result = mutableListOf<ByteArray>()
+  private fun splitOutput(output: ByteArray, hashes: List<HashAndPath>): Map<FilePath, ByteArray>? {
+    val result = mutableMapOf<FilePath, ByteArray>()
     var currentPosition = 0
-    for (hash in hashes) {
-      val separatorBytes = "$RECORD_SEPARATOR${hash}".toByteArray()
+    for ((hash, path, _) in hashes) {
+      val separatorBytes = "$RECORD_SEPARATOR${hash}\n".toByteArray()
       if (!ArrayUtil.startsWith(output, currentPosition, separatorBytes)) {
         LOG.error("Unexpected output for hash $hash at position $currentPosition", Attachment("catfile.txt", String(output)))
         return null
       }
 
-      val eol = '\n'.toByte()
-      val eolIndex = ArrayUtils.indexOf(output, eol, currentPosition + separatorBytes.size)
-      if (eolIndex < 0) {
-        LOG.error("Unexpected output for hash $hash at position $currentPosition", Attachment("catfile.txt", String(output)))
-        return null
-      }
+      val startIndex = currentPosition + separatorBytes.size
 
       val plainSeparatorBytes = RECORD_SEPARATOR.toByteArray()
-      val nextSeparator = ArrayUtil.indexOf(output, plainSeparatorBytes, eolIndex)
+      val nextSeparator = ArrayUtil.indexOf(output, plainSeparatorBytes, startIndex)
 
-      val startIndex = eolIndex + 1
       val endIndex = if (nextSeparator > 0) nextSeparator else output.size
       if (endIndex > output.size) {
         LOG.error("Unexpected output for hash $hash at position $currentPosition", Attachment("catfile.txt", String(output)))
         return null
       }
+      if (endIndex <= startIndex || output[endIndex - 1] != '\n'.toByte()) {
+        LOG.error("Unexpected output for hash $hash at position $endIndex", Attachment("catfile.txt", String(output)))
+        return null
+      }
 
-      val content = output.copyOfRange(startIndex, endIndex - 1) // -1 because the content is followed by a newline
-      result.add(content)
+      val content   = output.copyOfRange(startIndex, endIndex - 1) // -1 because the content is followed by a newline
+      result[path] = content
       currentPosition = endIndex
     }
 
@@ -142,8 +139,6 @@ class GitRevisionContentPreLoader(val project: Project) {
     return result
   }
 
-  private data class HashAndPath(val hash: String, val path: String)
-
-  private data class Info(val filePath: FilePath, val change: Change)
+  private data class HashAndPath(val hash: String, val path: FilePath, val relativePath: String)
 
 }

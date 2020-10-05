@@ -29,11 +29,11 @@ import java.io.*;
 import java.util.Collection;
 
 public class FileProcessingCompilerStateCache {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.compiler.impl.FileProcessingCompilerStateCache");
+  private static final Logger LOG = Logger.getInstance(FileProcessingCompilerStateCache.class);
   private final StateCache<MyState> myCache;
 
   public FileProcessingCompilerStateCache(File storeDirectory, final ValidityStateFactory stateFactory) throws IOException {
-    myCache = new StateCache<MyState>(new File(storeDirectory, "timestamps")) {
+    myCache = new StateCache<>(new File(storeDirectory, "timestamps")) {
       @Override
       public MyState read(DataInput stream) throws IOException {
         return new MyState(stream.readLong(), stateFactory.createValidityState(stream));

@@ -17,6 +17,7 @@ import com.intellij.openapi.editor.colors.EditorColorsScheme;
 import com.intellij.openapi.editor.colors.TextAttributesKey;
 import com.intellij.openapi.editor.markup.TextAttributes;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.NlsSafe;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiField;
 import com.intellij.ui.ColoredTreeCellRenderer;
@@ -61,7 +62,7 @@ import java.util.*;
  * @author Vladimir Kondratyev
  */
 public final class ComponentTree extends Tree implements DataProvider {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.uiDesigner.componentTree.ComponentTree");
+  private static final Logger LOG = Logger.getInstance(ComponentTree.class);
 
   public static final DataKey<LwInspectionSuppression[]> LW_INSPECTION_SUPPRESSION_ARRAY_DATA_KEY =
     DataKey.create(LwInspectionSuppression.class.getName());
@@ -197,7 +198,7 @@ public final class ComponentTree extends Tree implements DataProvider {
    *
    * @return currently selected components.
    */
-  @NotNull public RadComponent[] getSelectedComponents() {
+  public RadComponent @NotNull [] getSelectedComponents() {
     final TreePath[] paths = getSelectionPaths();
     if (paths == null) {
       return RadComponent.EMPTY_ARRAY;
@@ -473,7 +474,7 @@ public final class ComponentTree extends Tree implements DataProvider {
         }
       }
       else if (node.getUserObject() != null) {
-        final String fragment = node.getUserObject().toString();
+        final @NlsSafe String fragment = node.getUserObject().toString();
         if (fragment != null) {
           append(fragment, SimpleTextAttributes.REGULAR_ATTRIBUTES);
         }

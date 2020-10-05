@@ -15,15 +15,13 @@
  */
 package com.siyeh.ig;
 
-import com.intellij.codeInsight.daemon.HighlightDisplayKey;
 import com.intellij.codeInspection.AbstractBaseJavaLocalInspectionTool;
 import com.intellij.codeInspection.InspectionProfileEntry;
 import com.intellij.codeInspection.ProblemsHolder;
-import com.intellij.codeInspection.ex.InspectionProfileImpl;
+import com.intellij.codeInspection.util.InspectionMessage;
 import com.intellij.openapi.util.DefaultJDOMExternalizer;
 import com.intellij.openapi.util.WriteExternalException;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.profile.codeInspection.InspectionProjectProfileManager;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiElementVisitor;
 import com.intellij.psi.PsiFile;
@@ -39,7 +37,6 @@ import org.jetbrains.annotations.Nullable;
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.text.Document;
-import java.lang.reflect.Field;
 import java.text.NumberFormat;
 import java.text.ParseException;
 import java.util.List;
@@ -61,11 +58,6 @@ public abstract class BaseInspection extends AbstractBaseJavaLocalInspectionTool
     return m_shortName;
   }
 
-  @Nls
-  @NotNull
-  @Override
-  public abstract String getDisplayName();
-
   @Override
   @Nls
   @NotNull
@@ -74,7 +66,7 @@ public abstract class BaseInspection extends AbstractBaseJavaLocalInspectionTool
   }
 
   @NotNull
-  protected abstract String buildErrorString(Object... infos);
+  protected abstract @InspectionMessage String buildErrorString(Object... infos);
 
   protected boolean buildQuickFixesOnlyForOnTheFlyErrors() {
     return false;
@@ -105,8 +97,7 @@ public abstract class BaseInspection extends AbstractBaseJavaLocalInspectionTool
    * @param infos additional information which was supplied by {@link BaseInspectionVisitor} during error registration.
    * @return an array of fixes (empty array if no fix is available).
    */
-  @NotNull
-  protected InspectionGadgetsFix[] buildFixes(Object... infos) {
+  protected InspectionGadgetsFix @NotNull [] buildFixes(Object... infos) {
     return InspectionGadgetsFix.EMPTY_ARRAY;
   }
 
@@ -130,18 +121,15 @@ public abstract class BaseInspection extends AbstractBaseJavaLocalInspectionTool
    * @param node  the xml element node the fields are written to.
    * @param excludedProperties  fields with names specified here are not written, and have to be handled separately
    */
-  protected void defaultWriteSettings(@NotNull Element node, final String... excludedProperties) throws WriteExternalException {
-    DefaultJDOMExternalizer.writeExternal(this, node, new DefaultJDOMExternalizer.JDOMFilter() {
-      @Override
-      public boolean isAccept(@NotNull Field field) {
-        final String name = field.getName();
-        for (String property : excludedProperties) {
-          if (name.equals(property)) {
-            return false;
-          }
+  protected void defaultWriteSettings(@NotNull Element node, final @NonNls String... excludedProperties) throws WriteExternalException {
+    DefaultJDOMExternalizer.write(this, node, field -> {
+      final String name = field.getName();
+      for (String property : excludedProperties) {
+        if (name.equals(property)) {
+          return false;
         }
-        return true;
       }
+      return true;
     });
   }
 
@@ -241,11 +229,5 @@ public abstract class BaseInspection extends AbstractBaseJavaLocalInspectionTool
       out.append(',');
       out.append(strings[i].get(index));
     }
-  }
-
-  public static boolean isInspectionEnabled(@NonNls String shortName, PsiElement context) {
-    final InspectionProjectProfileManager profileManager = InspectionProjectProfileManager.getInstance(context.getProject());
-    final InspectionProfileImpl profile = profileManager.getCurrentProfile();
-    return profile.isToolEnabled(HighlightDisplayKey.find(shortName), context);
   }
 }

@@ -1,3 +1,4 @@
-deprecated: CreateNewProjectfromExistingFiles.png -> /toolbarDecorator/import.svg; to be removed in IDEA 2020 - use AllIcons.ToolbarDecorator.Import
-deprecated: importProject.png -> /toolbarDecorator/import.svg; to be removed in IDEA 2020 - use AllIcons.ToolbarDecorator.Import
-deprecated: openProject.png -> /actions/menu-open.svg; to be removed in IDEA 2020 - use AllIcons.Actions.Menu_open
+deprecated: createDesktopEntry.png; to be removed in IDEA 2021.1
+deprecated: register.png; to be removed in IDEA 2021.1
+deprecated: fromVcs.svg; to be removed in IDEA 2021.1
+deprecated: createNewProject.svg; to be removed in IDEA 2021.1

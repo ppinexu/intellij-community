@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide;
 
 import com.intellij.openapi.diagnostic.Logger;
@@ -15,7 +15,7 @@ import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.util.List;
 
-public class AssertiveRepaintManager extends RepaintManager {
+public final class AssertiveRepaintManager extends RepaintManager {
   private final static Logger LOG = Logger.getInstance(AssertiveRepaintManager.class);
 
   private WeakReference<Component> myLastComponent;
@@ -118,7 +118,7 @@ public class AssertiveRepaintManager extends RepaintManager {
   }
 
   private void checkThreadViolations(@Nullable Component c) {
-    if (!SwingUtilities.isEventDispatchThread()) {
+    if (!SwingUtilities.isEventDispatchThread() && (c == null || c.isShowing())) {
       final Exception exception = new Exception();
       StackTraceElement[] stackTrace = exception.getStackTrace();
 

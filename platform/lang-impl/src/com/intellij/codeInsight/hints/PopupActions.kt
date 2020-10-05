@@ -1,18 +1,18 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.hints
 
 import com.intellij.codeInsight.CodeInsightBundle
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
 import com.intellij.codeInsight.daemon.impl.ParameterHintsPresentationManager
 import com.intellij.codeInsight.hints.HintInfo.MethodInfo
-import com.intellij.codeInsight.hints.settings.InlayHintsConfigurable
 import com.intellij.codeInsight.hints.settings.Diff
+import com.intellij.codeInsight.hints.settings.InlayHintsConfigurable
 import com.intellij.codeInsight.hints.settings.ParameterNameHintsSettings
+import com.intellij.codeInsight.hints.settings.language.ParameterInlayProviderSettingsModel
 import com.intellij.codeInsight.intention.HighPriorityAction
 import com.intellij.codeInsight.intention.IntentionAction
 import com.intellij.codeInsight.intention.LowPriorityAction
+import com.intellij.codeInspection.util.IntentionName
 import com.intellij.injected.editor.EditorWindow
 import com.intellij.lang.Language
 import com.intellij.notification.Notification
@@ -23,6 +23,7 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.impl.EditorImpl
+import com.intellij.openapi.editor.impl.ImaginaryEditor
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
@@ -31,6 +32,7 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiManager
 import com.intellij.psi.util.PsiTreeUtil
+import java.util.function.Predicate
 
 
 class ShowSettingsWithAddedPattern : AnAction() {
@@ -81,19 +83,15 @@ fun showParameterHintsDialog(e: AnActionEvent, getPattern: (HintInfo) -> String?
   val selectedLanguage = (info as? MethodInfo)?.language ?: fileLanguage
 
   when (val pattern = getPattern(info)) {
-    null -> InlayHintsConfigurable.showSettingsDialogForLanguage(file.project, fileLanguage)
-    else -> BlackListDialog(selectedLanguage, pattern).show()
+    null -> InlayHintsConfigurable.showSettingsDialogForLanguage(file.project, fileLanguage,
+                                                                 Predicate { it is ParameterInlayProviderSettingsModel })
+    else -> ExcludeListDialog(selectedLanguage, pattern).show()
   }
 }
 
 class BlacklistCurrentMethodIntention : IntentionAction, LowPriorityAction {
-  companion object {
-    private val presentableText = CodeInsightBundle.message("inlay.hints.blacklist.method")
-    private val presentableFamilyName = CodeInsightBundle.message("inlay.hints.intention.family.name")
-  }
-  
-  override fun getText(): String = presentableText
-  override fun getFamilyName(): String = presentableFamilyName
+  override fun getText(): String = CodeInsightBundle.message("inlay.hints.blacklist.method")
+  override fun getFamilyName(): String = CodeInsightBundle.message("inlay.hints.intention.family.name")
 
   override fun isAvailable(project: Project, editor: Editor, file: PsiFile): Boolean {
     val language = file.language
@@ -130,15 +128,17 @@ class BlacklistCurrentMethodIntention : IntentionAction, LowPriorityAction {
       notification.expire()
     }
 
-    val notification = Notification("Parameter Name Hints", "Method \"$methodName\" added to blacklist", 
-                 "<html><a href='settings'>Show Parameter Hints Settings</a> or <a href='undo'>Undo</a></html>",
-                 NotificationType.INFORMATION, listener)
+
+    val notification = Notification("Parameter Name Hints",
+                                    CodeInsightBundle.message("notification.inlay.method.added.to.blacklist", methodName),
+                                    CodeInsightBundle.message("notification.show.parameter.hints.settings.or.undo.label"),
+                                    NotificationType.INFORMATION, listener)
     
     notification.notify(project)
   }
   
   private fun showSettings(language: Language) {
-    BlackListDialog(language).show()
+    ExcludeListDialog(language).show()
   }
   
   private fun undo(language: Language, info: MethodInfo) {
@@ -159,22 +159,22 @@ class BlacklistCurrentMethodIntention : IntentionAction, LowPriorityAction {
 
 
 class DisableCustomHintsOption: IntentionAction, LowPriorityAction {
-  companion object {
-    private val presentableFamilyName = CodeInsightBundle.message("inlay.hints.intention.family.name")
-  }
-  
+  @IntentionName
   private var lastOptionName = ""
   
   override fun getText(): String = getIntentionText()
 
+  @IntentionName
   private fun getIntentionText(): String {
-    if (lastOptionName.startsWith("show", ignoreCase = true)) {
-      return "Do not ${lastOptionName.toLowerCase()}"
+    val optionPrefix = CodeInsightBundle.message("inlay.hints.disable.option.shortening_rule", 0)
+    val resultPrefix = CodeInsightBundle.message("inlay.hints.disable.option.shortening_rule", 1)
+    if (optionPrefix.isNotBlank() && resultPrefix.isNotBlank() && lastOptionName.startsWith(optionPrefix)) {
+      return resultPrefix + lastOptionName.substring(optionPrefix.length)
     }
-    return CodeInsightBundle.message("inlay.hints.disable.custom.option", lastOptionName)
+    return CodeInsightBundle.message("inlay.hints.disable.option", lastOptionName)
   }
   
-  override fun getFamilyName(): String = presentableFamilyName
+  override fun getFamilyName(): String = CodeInsightBundle.message("inlay.hints.intention.family.name")
 
   override fun isAvailable(project: Project, editor: Editor, file: PsiFile): Boolean {
     InlayParameterHintsExtension.forLanguage(file.language) ?: return false
@@ -201,21 +201,18 @@ class DisableCustomHintsOption: IntentionAction, LowPriorityAction {
 }
 
 class EnableCustomHintsOption: IntentionAction, HighPriorityAction {
-
-  companion object {
-    private val presentableFamilyName = CodeInsightBundle.message("inlay.hints.intention.family.name")
-  }
-  
+  @IntentionName
   private var lastOptionName = ""
   
   override fun getText(): String {
-    if (lastOptionName.startsWith("show", ignoreCase = true)) {
-      return lastOptionName.capitalizeFirstLetter()
+    val optionPrefix = CodeInsightBundle.message("inlay.hints.enable.option.shortening_rule").replace('|', ' ')
+    if (optionPrefix.isNotBlank() && lastOptionName.startsWith(optionPrefix)) {
+      return lastOptionName
     }
-    return CodeInsightBundle.message("inlay.hints.enable.custom.option", lastOptionName)
+    return CodeInsightBundle.message("inlay.hints.enable.option", lastOptionName)
   }
   
-  override fun getFamilyName(): String = presentableFamilyName
+  override fun getFamilyName(): String = CodeInsightBundle.message("inlay.hints.intention.family.name")
 
   override fun isAvailable(project: Project, editor: Editor, file: PsiFile): Boolean {
     val language = file.language
@@ -236,8 +233,10 @@ class EnableCustomHintsOption: IntentionAction, HighPriorityAction {
     val element = file.findElementAt(offset) ?: return null
     val provider = InlayParameterHintsExtension.forLanguage(file.language) ?: return null
 
-    val target = PsiTreeUtil.findFirstParent(element) { provider.hasDisabledOptionHintInfo(it) } ?: return null
-    return provider.getHintInfo(target) as? HintInfo.OptionInfo
+    val target = PsiTreeUtil.findFirstParent(element) { it is PsiFile
+                                                        || provider.hasDisabledOptionHintInfo(it, file) }
+    if (target == null || target is PsiFile) return null
+    return provider.getHintInfo(target, file) as? HintInfo.OptionInfo
   }
 
   override fun invoke(project: Project, editor: Editor, file: PsiFile) {
@@ -251,19 +250,14 @@ class EnableCustomHintsOption: IntentionAction, HighPriorityAction {
 }
 
 
-private fun InlayParameterHintsProvider.hasDisabledOptionHintInfo(element: PsiElement): Boolean {
-  val info = getHintInfo(element)
+private fun InlayParameterHintsProvider.hasDisabledOptionHintInfo(element: PsiElement, file: PsiFile): Boolean {
+  val info = getHintInfo(element, file)
   return info is HintInfo.OptionInfo && !info.isOptionEnabled()
 }
 
 
 class ToggleInlineHintsAction : AnAction() {
-  
-  companion object {
-    private val disableText = CodeInsightBundle.message("inlay.hints.disable.action.text").capitalize()
-    private val enableText = CodeInsightBundle.message("inlay.hints.enable.action.text").capitalize()
-  }
-  
+
   override fun update(e: AnActionEvent) {
     if (!InlayParameterHintsExtension.hasAnyExtensions()) {
       e.presentation.isEnabledAndVisible = false
@@ -272,7 +266,10 @@ class ToggleInlineHintsAction : AnAction() {
 
     val file = CommonDataKeys.PSI_FILE.getData(e.dataContext) ?: return
     val isHintsShownNow = isParameterHintsEnabledForLanguage(file.language)
-    e.presentation.text = if (isHintsShownNow) disableText else enableText
+    e.presentation.text = if (isHintsShownNow)
+      CodeInsightBundle.message("inlay.hints.disable.action.text")
+    else
+      CodeInsightBundle.message("inlay.hints.enable.action.text")
     e.presentation.isEnabledAndVisible = true
   }
 
@@ -288,7 +285,7 @@ class ToggleInlineHintsAction : AnAction() {
 
 
 private fun hasEditorParameterHintAtOffset(editor: Editor, file: PsiFile): Boolean {
-  if (editor is EditorWindow) return false
+  if (editor is EditorWindow || editor is ImaginaryEditor) return false
   
   val offset = editor.caretModel.offset
   val element = file.findElementAt(offset)
@@ -318,14 +315,13 @@ private fun getHintInfoFromProvider(offset: Int, file: PsiFile, editor: Editor):
   val element = file.findElementAt(offset) ?: return null
   val provider = InlayParameterHintsExtension.forLanguage(file.language) ?: return null
 
-  val isHintOwnedByElement: (PsiElement) -> Boolean = { e -> provider.getHintInfo(e)?.isOwnedByPsiElement(e, editor) ?: false }
-  val method = PsiTreeUtil.findFirstParent(element, isHintOwnedByElement) ?: return null
-  
-  return provider.getHintInfo(method)
+  val method = PsiTreeUtil.findFirstParent(element) { it is PsiFile
+                                                      // hint owned by element
+                                                      || (provider.getHintInfo(it, file)?.isOwnedByPsiElement(it, editor) ?: false)}
+  if (method == null || method is PsiFile) return null
+  return provider.getHintInfo(method, file)
 }
 
 fun MethodInfo.toPattern(): String = this.fullyQualifiedName + '(' + this.paramNames.joinToString(",") + ')'
 
-
-private fun String.capitalize() = StringUtil.capitalizeWords(this, true)
 private fun String.capitalizeFirstLetter() = StringUtil.capitalize(this)

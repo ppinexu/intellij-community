@@ -16,38 +16,97 @@
 package com.intellij.diagnostic.hprof.analysis
 
 import com.intellij.diagnostic.hprof.classstore.ClassDefinition
+import com.intellij.diagnostic.hprof.classstore.ClassStore
 import com.intellij.diagnostic.hprof.navigator.ObjectNavigator
-import com.intellij.diagnostic.hprof.util.HeapReportUtils.Companion.STRING_PADDING_FOR_COUNT
-import com.intellij.diagnostic.hprof.util.HeapReportUtils.Companion.STRING_PADDING_FOR_SIZE
-import com.intellij.diagnostic.hprof.util.HeapReportUtils.Companion.toShortStringAsCount
-import com.intellij.diagnostic.hprof.util.HeapReportUtils.Companion.toShortStringAsSize
-import com.intellij.diagnostic.hprof.util.IntList
+import com.intellij.diagnostic.hprof.util.HeapReportUtils.STRING_PADDING_FOR_COUNT
+import com.intellij.diagnostic.hprof.util.HeapReportUtils.STRING_PADDING_FOR_SIZE
+import com.intellij.diagnostic.hprof.util.HeapReportUtils.toShortStringAsCount
+import com.intellij.diagnostic.hprof.util.HeapReportUtils.toShortStringAsSize
 import com.intellij.diagnostic.hprof.util.TruncatingPrintBuffer
-import gnu.trove.TIntArrayList
-import gnu.trove.TIntHashSet
-import gnu.trove.TIntObjectHashMap
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
+import it.unimi.dsi.fastutil.ints.IntArrayList
+import it.unimi.dsi.fastutil.ints.IntOpenHashSet
 import java.util.*
 
-class GCRootPathsTree(
-  private val disposedObjectsIDsSet: TIntHashSet,
-  private val parentMapping: IntList,
-  private val sizesMapping: IntList,
-  private val nav: ObjectNavigator,
-  private val allObjectsOfClass: ClassDefinition?
+internal class GCRootPathsTree(
+  val analysisContext: AnalysisContext,
+  val treeDisplayOptions: AnalysisConfig.TreeDisplayOptions,
+  allObjectsOfClass: ClassDefinition?
 ) {
-  private val topNode = RootNode()
+  private val topNode = RootNode(analysisContext.classStore)
   private var countOfIgnoredObjects = 0
 
   // If all objects are of the same class and not arrays then instance size can be computed only once.
-  private val cachedSize = allObjectsOfClass?.let { if (allObjectsOfClass.isArray()) null else it.instanceSize }
+  private val objectSizeStrategy = ObjectSizeCalculationStrategy.getBestStrategyForClass(allObjectsOfClass)
+
+  interface ObjectSizeCalculationStrategy {
+    fun calculateObjectSize(nav: ObjectNavigator, id: Int): Int
+
+    companion object {
+      fun getBestStrategyForClass(classDefinition: ClassDefinition?): ObjectSizeCalculationStrategy {
+        if (classDefinition == null || classDefinition.isArray()) {
+          return SizeFromObjectNavigatorStrategy()
+        }
+        else if (classDefinition.name == "java.nio.DirectByteBuffer") {
+          // When focusing on DirectByteBuffers, add sizes of native arrays.
+          return DirectByteBufferNativeSizeStrategy(classDefinition)
+        }
+        else {
+          return AllObjectsSameSizeStrategy(classDefinition.instanceSize + ClassDefinition.OBJECT_PREAMBLE_SIZE)
+        }
+      }
+    }
+  }
+
+  private class AllObjectsSameSizeStrategy(size: Int) : ObjectSizeCalculationStrategy {
+
+    private val objectSize = size
+
+    override fun calculateObjectSize(nav: ObjectNavigator, id: Int): Int = objectSize
+  }
+
+  private class SizeFromObjectNavigatorStrategy : ObjectSizeCalculationStrategy {
+    override fun calculateObjectSize(nav: ObjectNavigator, id: Int): Int {
+      nav.goTo(id.toLong(), ObjectNavigator.ReferenceResolution.NO_REFERENCES)
+      return nav.getObjectSize()
+    }
+  }
+
+  private class DirectByteBufferNativeSizeStrategy(private val classDefinition: ClassDefinition) : ObjectSizeCalculationStrategy {
+    init {
+      assert(classDefinition.name == "java.nio.DirectByteBuffer")
+    }
+
+    override fun calculateObjectSize(nav: ObjectNavigator, id: Int): Int {
+      nav.goTo(id.toLong(), ObjectNavigator.ReferenceResolution.ALL_REFERENCES)
+      assert(nav.getClass() == classDefinition)
+      return nav.getExtraData() + nav.getObjectSize()
+    }
+  }
 
   fun registerObject(objectId: Int) {
-    val gcPath = TIntArrayList()
+    val nav = analysisContext.navigator
+    val parentMapping = analysisContext.parentList
+    val refIndexMapping = analysisContext.refIndexList
+    val sizesMapping = analysisContext.sizesList
+    val disposedObjectsIDsSet = analysisContext.disposedObjectsIDs
+
+    val gcPath = IntArrayList()
+    val fieldsPath = IntArrayList()
     var objectIterationId = objectId
     var parentId = parentMapping[objectIterationId]
     var count = 0
-    while (count < MAX_TREE_DEPTH && parentId != objectIterationId) {
+
+    fieldsPath.add(0)
+    val maxTreeDepth = treeDisplayOptions.maximumTreeDepth
+    while (count < maxTreeDepth && parentId != objectIterationId) {
       gcPath.add(objectIterationId)
+      if (treeDisplayOptions.showFieldNames) {
+        fieldsPath.add(refIndexMapping[objectIterationId])
+      }
+      else {
+        fieldsPath.add(0)
+      }
       objectIterationId = parentId
       parentId = parentMapping[objectIterationId]
       count++
@@ -61,29 +120,37 @@ class GCRootPathsTree(
 
     gcPath.add(objectIterationId)
 
-    val size = if (cachedSize != null) cachedSize
-    else {
-      nav.goTo(objectId.toLong(), ObjectNavigator.ReferenceResolution.NO_REFERENCES)
-      nav.getObjectSize()
-    }
+    assert(gcPath.size == fieldsPath.size)
+
+    val size = objectSizeStrategy.calculateObjectSize(nav, objectId)
 
     var currentNode: Node = topNode
-    for (i in gcPath.size() - 1 downTo 0) {
-      val id = gcPath[i]
-      val classDefinition = nav.getClassForObjectId(id.toLong())
-      currentNode = currentNode.addEdge(id, size, sizesMapping[id], classDefinition, disposedObjectsIDsSet.contains(id))
+    for (i in gcPath.size - 1 downTo 0) {
+      val id = gcPath.getInt(i)
+      var classDefinition = nav.getClassForObjectId(id.toLong())
+      var fieldName: String? = null
+      if (fieldsPath.getInt(i) != 0) {
+        if (classDefinition.name == "java.lang.Class") {
+          classDefinition = nav.classStore[id.toLong()]
+          fieldName = classDefinition.getClassFieldName(fieldsPath.getInt(i) - 1)
+        }
+        else {
+          fieldName = classDefinition.getRefField(nav.classStore, fieldsPath.getInt(i) - 1).name
+        }
+      }
+      currentNode = currentNode.addEdge(id, size, sizesMapping[id], classDefinition, fieldName, disposedObjectsIDsSet.contains(id))
     }
   }
 
-  fun printTree(headLimit: Int, tailLimit: Int): String {
+  fun printTree(): String {
     val result = StringBuilder()
     if (countOfIgnoredObjects > 0) {
       result.append("Ignored ${countOfIgnoredObjects} too-deep objects\n")
     }
     val rootReasonGetter = { id: Int ->
-      (nav.getRootReasonForObjectId(id.toLong())?.description ?: "<Couldn't find root description>")
+      (analysisContext.navigator.getRootReasonForObjectId(id.toLong())?.description ?: "<Couldn't find root description>")
     }
-    result.append(topNode.createHotPathReport(rootReasonGetter, headLimit, tailLimit))
+    result.append(topNode.createHotPathReport(treeDisplayOptions, rootReasonGetter))
     return result.toString()
   }
 
@@ -94,10 +161,15 @@ class GCRootPathsTree(
   }
 
   interface Node {
-    fun addEdge(objectId: Int, objectSize: Int, subgraphSizeInDwords: Int, classDefinition: ClassDefinition, disposed: Boolean): Node
+    fun addEdge(objectId: Int,
+                objectSize: Int,
+                subgraphSizeInDwords: Int,
+                classDefinition: ClassDefinition,
+                fieldName: String?,
+                disposed: Boolean): Node
   }
 
-  data class Edge(val classDefinition: ClassDefinition, val disposed: Boolean)
+  data class Edge(val classDefinition: ClassDefinition, val fieldName: String?, val disposed: Boolean)
 
   class RegularNode : Node {
 
@@ -106,19 +178,20 @@ class GCRootPathsTree(
     var pathsCount = 0
     var pathsSize = 0
     var totalSizeInDwords = 0
-    val instances = TIntHashSet(1)
+    val instances = IntOpenHashSet(1)
 
     override fun addEdge(objectId: Int,
                          objectSize: Int,
                          subgraphSizeInDwords: Int,
                          classDefinition: ClassDefinition,
+                         fieldName: String?,
                          disposed: Boolean): Node {
       var localEdges = edges
       if (localEdges == null) {
         localEdges = HashMap(1)
         edges = localEdges
       }
-      val node = localEdges.getOrPut(Edge(classDefinition, disposed)) { RegularNode() }
+      val node = localEdges.getOrPut(Edge(classDefinition, fieldName, disposed)) { RegularNode() }
       node.pathsCount++
       if (node.pathsSize + objectSize.toLong() > Int.MAX_VALUE) {
         node.pathsSize = Int.MAX_VALUE
@@ -156,15 +229,15 @@ class GCRootPathsTree(
     }
   }
 
-  class RootNode : Node {
-
+  class RootNode(private val classStore: ClassStore) : Node {
     // In root node each instance has a separate path
-    val edges = TIntObjectHashMap<Pair<RegularNode, ClassDefinition>>()
+    val edges = Int2ObjectOpenHashMap<Pair<RegularNode, Edge>>()
 
     override fun addEdge(objectId: Int,
                          objectSize: Int,
                          subgraphSizeInDwords: Int,
                          classDefinition: ClassDefinition,
+                         fieldName: String?,
                          disposed: Boolean): Node {
       val nullableNode = edges.get(objectId)?.first
       val node: RegularNode
@@ -174,7 +247,7 @@ class GCRootPathsTree(
       }
       else {
         val newNode = RegularNode()
-        val pair = Pair(newNode, classDefinition)
+        val pair = Pair(newNode, Edge(classDefinition, fieldName, disposed))
         newNode.instances.add(objectId)
         edges.put(objectId, pair)
         node = newNode
@@ -193,9 +266,8 @@ class GCRootPathsTree(
 
     private fun calculateTotalInstanceCount(): Int {
       var result = 0
-      edges.forEachValue { (node, _) ->
-        result += node.pathsCount
-        true
+      for (node in edges.values) {
+        result += node.first.pathsCount
       }
       return result
     }
@@ -207,123 +279,187 @@ class GCRootPathsTree(
       val nextIndent: String
     )
 
-    fun createHotPathReport(rootReasonGetter: (Int) -> String, headLimit: Int, tailLimit: Int): String {
-      val rootList = mutableListOf<Triple<Int, RegularNode, ClassDefinition>>()
-      val result = StringBuilder()
-      edges.forEachEntry { objectId, (node, classDef) ->
-        rootList.add(Triple(objectId, node, classDef))
+    private class SoftWeakClassCache(private val classStore: ClassStore) {
+      val softClasses = mutableSetOf<ClassDefinition>()
+      val weakClasses = mutableSetOf<ClassDefinition>()
+      val nonSoftWeakClasses = mutableSetOf<ClassDefinition>()
+
+      fun getSoftWeakDescriptor(classDefinition: ClassDefinition): String? {
+        if (softClasses.contains(classDefinition))
+          return "soft"
+        if (weakClasses.contains(classDefinition))
+          return "weak"
+        if (nonSoftWeakClasses.contains(classDefinition))
+          return null
+
+        var definition = classDefinition
+        while (!classStore.isSoftOrWeakReferenceClass(definition)) {
+          val superclassDefinition = definition.getSuperClass(classStore)
+          if (superclassDefinition == null) {
+            nonSoftWeakClasses.add(classDefinition)
+            return null
+          }
+          definition = superclassDefinition
+        }
+        if (definition == classStore.weakReferenceClass) {
+          weakClasses.add(classDefinition)
+          return "weak"
+        }
+        else {
+          assert(definition == classStore.softReferenceClass)
+          softClasses.add(classDefinition)
+          return "soft"
+        }
       }
-      rootList.sortByDescending { it.second.pathsSize }
+
+    }
+
+    fun createHotPathReport(treeDisplayOptions: AnalysisConfig.TreeDisplayOptions, rootReasonGetter: (Int) -> String): String {
+      val rootList = mutableListOf<Triple<Int, RegularNode, Edge>>()
+      val result = StringBuilder()
+      val printFunc = { s: String -> result.appendln(s); Unit }
+
+      for (entry in edges.int2ObjectEntrySet().fastIterator()) {
+        rootList.add(Triple(entry.intKey, entry.value.first, entry.value.second))
+      }
       val totalInstanceCount = calculateTotalInstanceCount()
 
       val minimumObjectsForReport = Math.min(
-        MINIMUM_OBJECT_COUNT_FOR_REPORT,
-        (Math.ceil(totalInstanceCount / 100.0) * MINIMUM_OBJECT_COUNT_PERCENT).toInt())
+        treeDisplayOptions.minimumObjectCount,
+        (Math.ceil(totalInstanceCount / 100.0) * treeDisplayOptions.minimumObjectCountPercent).toInt())
 
-      // Show paths from roots that have at least MINIMUM_OBJECT_COUNT_PERCENT or MINIMUM_OBJECT_COUNT_FOR_REPORT objects.
+      val softWeakClassCache = SoftWeakClassCache(classStore)
+
+      // Show paths from roots that have at least minimumObjectCountPercent%, minimumObjectCount objects or size of all reported objects
+      // in the subtree is more than minimumObjectSize.
       // Always show at least two paths.
-      rootList.filterIndexed { index, (_, node, _) ->
-        index <= 1 || node.pathsCount >= minimumObjectsForReport || node.pathsSize >= MINIMUM_OBJECT_SIZE_FOR_REPORT
-      }.forEach { (rootObjectId, rootNode, rootObjectClass) ->
-        val printFunc = { s: String -> result.appendln(s); Unit }
+      rootList
+        .filterIndexed { index, (_, node, _) ->
+          index < treeDisplayOptions.minimumPaths ||
+          node.pathsCount >= minimumObjectsForReport ||
+          node.pathsSize >= treeDisplayOptions.minimumObjectSize
+        }
+        .sortedByDescending { it.second.pathsSize }
+        .forEachIndexed { index, (rootObjectId, rootNode, rootEdge) ->
+          val rootReasonString = rootReasonGetter(rootObjectId)
+          val rootPercent = (100.0 * rootNode.pathsCount / totalInstanceCount).toInt()
 
-        val rootReasonString = rootReasonGetter(rootObjectId)
+          result.appendln("Root ${index + 1}:")
+          printReportLine(printFunc,
+                          treeDisplayOptions,
+                          rootNode.pathsCount,
+                          rootPercent,
+                          rootNode.pathsSize,
+                          rootNode.totalSizeInDwords.toLong() * 4,
+                          1,
+                          false,
+                          null,
+                          false,
+                          null,
+                          "",
+                          "ROOT: $rootReasonString")
 
-        val rootPercent = (100.0 * rootNode.pathsCount / totalInstanceCount).toInt()
+          TruncatingPrintBuffer(treeDisplayOptions.headLimit, treeDisplayOptions.tailLimit, printFunc).use { buffer ->
+            // Iterate over the hot path
+            val stack = ArrayDeque<StackEntry>()
+            stack.push(StackEntry(rootEdge, rootNode, "", ""))
 
-        result.appendln("ROOT: $rootReasonString: ${rootNode.pathsCount} objects ($rootPercent%), ${toShortStringAsSize(
-          rootNode.pathsSize.toLong())}")
+            while (!stack.isEmpty()) {
+              val (edge, node, indent, nextIndent) = stack.pop()
+              val (classDefinition, fieldName, disposed) = edge
 
-        TruncatingPrintBuffer(headLimit, tailLimit, printFunc).use { buffer ->
-          // Iterate over the hot path
-          val stack = ArrayDeque<StackEntry>()
-          stack.push(StackEntry(Edge(rootObjectClass, false), rootNode, "", ""))
+              // Soft/weak referents don't have a parent field set to differentiate them from other (strong-referencing) fields.
+              val softWeakDescriptor = if (fieldName == null) softWeakClassCache.getSoftWeakDescriptor(classDefinition) else null
 
-          while (!stack.isEmpty()) {
-            val (edge, node, indent, nextIndent) = stack.pop()
-            val (classDefinition, disposed) = edge
+              printReportLine(buffer::println,
+                              treeDisplayOptions,
+                              node.pathsCount,
+                              (100.0 * node.pathsCount / totalInstanceCount).toInt(),
+                              node.pathsSize,
+                              node.totalSizeInDwords.toLong() * 4,
+                              node.instances.size,
+                              node.edges == null,
+                              softWeakDescriptor,
+                              disposed,
+                              fieldName,
+                              indent,
+                              classDefinition.prettyName)
 
-            printReportLine(buffer::println,
-                            node.pathsCount,
-                            (100.0 * node.pathsCount / totalInstanceCount).toInt(),
-                            node.instances.size(),
-                            node.pathsSize,
-                            node.totalSizeInDwords.toLong() * 4,
-                            node.edges == null,
-                            disposed,
-                            indent,
-                            classDefinition.prettyName)
+              val currentNodeEdges = node.edges ?: continue
+              val childrenToReport =
+                currentNodeEdges
+                  .entries
+                  .sortedByDescending { it.value.pathsSize }
+                  .filterIndexed { index, e ->
+                    index == 0 ||
+                    e.value.pathsCount >= minimumObjectsForReport ||
+                    e.value.pathsSize >= treeDisplayOptions.minimumObjectSize ||
+                    e.value.totalSizeInDwords.toLong() * 4 >= treeDisplayOptions.minimumSubgraphSize
+                  }
+                  .asReversed()
 
-            val currentNodeEdges = node.edges ?: continue
-            val childrenToReport =
-              currentNodeEdges
-                .entries
-                .sortedByDescending { it.value.pathsSize }
-                .filterIndexed { index, e ->
-                  index == 0 || e.value.pathsCount >= minimumObjectsForReport || e.value.pathsSize >= MINIMUM_OBJECT_SIZE_FOR_REPORT
-                }
-                .asReversed()
-
-            if (childrenToReport.size == 1) {
-              // No indentation for a single child
-              stack.push(StackEntry(childrenToReport[0].key, childrenToReport[0].value, nextIndent, nextIndent))
-            }
-            else {
-              // Don't report too deep paths
-              if (nextIndent.length >= MAX_INDENT)
-                printReportLine(buffer::println,
-                                null, null, null, null,
-                                null, true, null,
-                                nextIndent, "\\-[...]")
+              if (childrenToReport.size == 1 && treeDisplayOptions.smartIndent) {
+                // No indentation for a single child
+                stack.push(StackEntry(childrenToReport[0].key, childrenToReport[0].value, nextIndent, nextIndent))
+              }
               else {
-                // Add indentation only if there are 2+ children
-                childrenToReport.forEachIndexed { index, e ->
-                  if (index == 0) stack.push(StackEntry(e.key, e.value, "$nextIndent\\-", "$nextIndent  "))
-                  else stack.push(StackEntry(e.key, e.value, "$nextIndent+-", "$nextIndent| "))
+                // Don't report too deep paths
+                if (nextIndent.length >= treeDisplayOptions.maximumIndent)
+                  printReportLine(buffer::println,
+                                  treeDisplayOptions,
+                                  null, null, null, null,
+                                  null, true, null, null, null,
+                                  nextIndent, "\\-[...]")
+                else {
+                  // Add indentation only if there are 2+ children
+                  childrenToReport.forEachIndexed { index, e ->
+                    if (index == 0) stack.push(StackEntry(e.key, e.value, "$nextIndent\\-", "$nextIndent  "))
+                    else stack.push(StackEntry(e.key, e.value, "$nextIndent+-", "$nextIndent| "))
+                  }
                 }
               }
             }
           }
         }
-      }
       return result.toString()
     }
 
     private fun printReportLine(printFunc: (String) -> Any,
+                                treeDisplayOptions: AnalysisConfig.TreeDisplayOptions,
                                 pathsCount: Int?,
                                 percent: Int?,
-                                instanceCount: Int?,
                                 instanceSize: Int?,
                                 subgraphSize: Long?,
+                                instanceCount: Int?,
                                 lastInPath: Boolean,
+                                softWeakDescriptor: String?,
                                 disposed: Boolean?,
+                                fieldName: String?,
                                 indent: String,
                                 text: String) {
       val pathsCountString = (pathsCount?.let { toShortStringAsCount(it.toLong()) } ?: "").padStart(STRING_PADDING_FOR_COUNT)
       val percentString = (percent?.let { "$it%" } ?: "").padStart(4)
-      val instanceCountString = (instanceCount ?: "").toString().padStart(10)
-      val lastInPathString = if (lastInPath) "*" else " "
-      val disposedString = if (disposed == true) " (disposed)" else ""
       val instanceSizeString = (instanceSize?.let { toShortStringAsSize(it.toLong()) } ?: "").padStart(STRING_PADDING_FOR_SIZE)
+      val instanceCountString = (instanceCount ?: "").toString().padStart(10)
+      val status = if (lastInPath) "*" else if (softWeakDescriptor != null || disposed == true) "!" else " "
+      val fieldNameString = if (fieldName != null) ".$fieldName" else ""
+      val disposedString = if (disposed == true) " (disposed)" else ""
+      val softWeakString = if (softWeakDescriptor != null) " ($softWeakDescriptor)" else ""
       val subgraphSizeString = (subgraphSize?.let { toShortStringAsSize(it) } ?: "").padStart(STRING_PADDING_FOR_SIZE)
 
-      printFunc(
-        "[$pathsCountString/$percentString/$instanceSizeString] $subgraphSizeString $instanceCountString $lastInPathString $indent$text$disposedString")
+      if (treeDisplayOptions.showSize) {
+        printFunc(
+          "[$pathsCountString/$percentString/$instanceSizeString] $subgraphSizeString $instanceCountString $status $indent$text$fieldNameString$disposedString$softWeakString")
+      }
+      else {
+        printFunc("$status $indent$text$fieldNameString$disposedString$softWeakString")
+      }
     }
 
     fun collectDisposedDominatorNodes(result: MutableMap<ClassDefinition, MutableList<RegularNode>>) {
-      edges.forEachValue { (node, _) ->
-        node.collectDisposedDominatorNodes(result)
-        true
+      for (value in edges.values) {
+        value.first.collectDisposedDominatorNodes(result)
       }
     }
-  }
-
-  companion object {
-    private const val MINIMUM_OBJECT_SIZE_FOR_REPORT = 10_000_000
-    private const val MINIMUM_OBJECT_COUNT_FOR_REPORT = 10_000
-    private const val MINIMUM_OBJECT_COUNT_PERCENT = 10
-    private const val MAX_TREE_DEPTH = 500
-    private const val MAX_INDENT = 40
   }
 }

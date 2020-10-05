@@ -13,9 +13,6 @@ import org.jetbrains.annotations.NotNull;
 
 import java.awt.event.KeyEvent;
 
-/**
- * @author nik
- */
 public class ResumeAction extends XDebuggerActionBase implements DumbAware {
   @Override
   protected boolean isEnabled(AnActionEvent e) {
@@ -28,6 +25,14 @@ public class ResumeAction extends XDebuggerActionBase implements DumbAware {
     }
     // disable visual representation but leave the shortcut action enabled
     return e.getInputEvent() instanceof KeyEvent;
+  }
+
+  @Override
+  protected boolean isHidden(AnActionEvent event) {
+    if (!PauseAction.isPauseResumeMerged()) {
+      return super.isHidden(event);
+    }
+    return super.isHidden(event) || !isEnabled(event);
   }
 
   @Override

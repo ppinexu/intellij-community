@@ -1,9 +1,10 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.java.psi.resolve;
 
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.extensions.impl.ExtensionPointImpl;
+import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.*;
 import com.intellij.openapi.roots.ModuleRootModificationUtil;
 import com.intellij.openapi.vfs.LocalFileSystem;
@@ -16,6 +17,7 @@ import com.intellij.util.containers.ContainerUtil;
 import org.easymock.IArgumentMatcher;
 
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.Collections;
 import java.util.Set;
 
@@ -54,7 +56,7 @@ public class ResolveClassInModulesWithDependenciesTest extends JavaResolveTestCa
   }
 
   public void testModuleSourceAsLibrarySource() throws Exception {
-    VirtualFile dir = createTempVfsDirectory();
+    VirtualFile dir = getTempDir().createVirtualDir();
     ModuleRootModificationUtil.addModuleLibrary(myModule, "lib", Collections.emptyList(), Collections.singletonList(dir.getUrl()));
 
     final PsiReference ref = configureByFile("class/" + getTestName(false) + ".java", dir);
@@ -66,7 +68,7 @@ public class ResolveClassInModulesWithDependenciesTest extends JavaResolveTestCa
   }
 
   public void testModuleSourceAsLibraryClasses() throws Exception {
-    VirtualFile dir = createTempVfsDirectory();
+    VirtualFile dir = getTempDir().createVirtualDir();
     ModuleRootModificationUtil.addModuleLibrary(myModule, "lib", Collections.singletonList(dir.getUrl()), Collections.emptyList());
 
     PsiReference ref = configureByFile("class/" + getTestName(false) + ".java", dir);
@@ -75,11 +77,7 @@ public class ResolveClassInModulesWithDependenciesTest extends JavaResolveTestCa
     assertNotNull(file);
     createFile(myModule, dir, "ModuleSourceAsLibraryClassesDep.java", loadFile("class/ModuleSourceAsLibraryClassesDep.java"));
     //need this to ensure that PsiJavaFileBaseImpl.myResolveCache is filled to reproduce IDEA-91309
-    DependenciesBuilder.analyzeFileDependencies(psiFile, new DependenciesBuilder.DependencyProcessor() {
-      @Override
-      public void process(PsiElement place, PsiElement dependency) {
-      }
-    });
+    DependenciesBuilder.analyzeFileDependencies(psiFile, (place, dependency) -> { });
     assertInstanceOf(ref.resolve(), PsiClass.class);
   }
 
@@ -118,7 +116,9 @@ public class ResolveClassInModulesWithDependenciesTest extends JavaResolveTestCa
 
   private static PsiElementFinder createMockFinder() {
     Set<String> ignoredMethods = ContainerUtil.newHashSet("getClassesFilter", "processPackageDirectories", "getClasses");
-    Method[] methods = ContainerUtil.findAllAsArray(PsiElementFinder.class.getDeclaredMethods(), m -> !ignoredMethods.contains(m.getName()));
+    Method[] methods = ContainerUtil.findAllAsArray(
+      PsiElementFinder.class.getDeclaredMethods(),
+      m -> !ignoredMethods.contains(m.getName()) && !Modifier.isPrivate(m.getModifiers()) && !Modifier.isStatic(m.getModifiers()));
     PsiElementFinder mock = createMockBuilder(PsiElementFinder.class).addMockedMethods(methods).createMock();
     expect(mock.findClasses(anyObject(), anyObject())).andReturn(PsiClass.EMPTY_ARRAY).anyTimes();
     expect(mock.findPackage(eq("foo"))).andReturn(null);

@@ -60,13 +60,14 @@ import static org.junit.Assert.*;
  * @author yole
  */
 public class EditorTestFixture {
+  @NotNull
   private final Project myProject;
   private final Editor myEditor;
   private final VirtualFile myFile;
 
   private boolean myEmptyLookup;
 
-  public EditorTestFixture(Project project, Editor editor, VirtualFile file) {
+  public EditorTestFixture(@NotNull Project project, Editor editor, VirtualFile file) {
     myProject = project;
     myEditor = editor;
     myFile = file;
@@ -112,6 +113,7 @@ public class EditorTestFixture {
 
       ActionManagerEx.getInstanceEx().fireBeforeEditorTyping(c, getEditorDataContext());
       TypedAction.getInstance().actionPerformed(myEditor, c, getEditorDataContext());
+      ActionManagerEx.getInstanceEx().fireAfterEditorTyping(c, getEditorDataContext());
     });
 
   }
@@ -148,11 +150,13 @@ public class EditorTestFixture {
     return myFile != null ? ReadAction.compute(() -> PsiManager.getInstance(myProject).findFile(myFile)) : null;
   }
 
+  @NotNull
   public List<HighlightInfo> doHighlighting() {
-    return doHighlighting(false);
+    return doHighlighting(false, false);
   }
 
-  public List<HighlightInfo> doHighlighting(boolean myAllowDirt) {
+  @NotNull
+  public List<HighlightInfo> doHighlighting(boolean myAllowDirt, boolean readEditorMarkupModel) {
     EdtTestUtil.runInEdtAndWait(() -> PsiDocumentManager.getInstance(myProject).commitAllDocuments());
 
     PsiFile file = getFile();
@@ -162,7 +166,7 @@ public class EditorTestFixture {
       file = InjectedLanguageManager.getInstance(file.getProject()).getTopLevelFile(file);
     }
     assertNotNull(file);
-    return instantiateAndRun(file, editor, ArrayUtilRt.EMPTY_INT_ARRAY, myAllowDirt);
+    return instantiateAndRun(file, editor, ArrayUtilRt.EMPTY_INT_ARRAY, myAllowDirt, readEditorMarkupModel);
   }
 
   @Nullable
@@ -201,8 +205,7 @@ public class EditorTestFixture {
     return getLookupElements();
   }
 
-  @Nullable
-  public LookupElement[] getLookupElements() {
+  public LookupElement @Nullable [] getLookupElements() {
     LookupImpl lookup = getLookup();
     if (lookup == null) {
       return myEmptyLookup ? LookupElement.EMPTY_ARRAY : null;
@@ -249,7 +252,7 @@ public class EditorTestFixture {
     return result;
   }
 
-  public void assertPreferredCompletionItems(final int selected, @NotNull final String... expected) {
+  public void assertPreferredCompletionItems(final int selected, final String @NotNull ... expected) {
     final LookupImpl lookup = getLookup();
     assertNotNull("No lookup is shown", lookup);
 
@@ -262,7 +265,7 @@ public class EditorTestFixture {
     }
     if (selected != list.getSelectedIndex()) {
       //noinspection UseOfSystemOutOrSystemErr
-      System.out.println(DumpLookupElementWeights.getLookupElementWeights(lookup, false));
+      DumpLookupElementWeights.getLookupElementWeights(lookup, false).forEach(System.out::println);
     }
     assertEquals(selected, list.getSelectedIndex());
   }
@@ -302,6 +305,7 @@ public class EditorTestFixture {
     return PsiTreeUtil.getParentOfType(getFile().findElementAt(pos), elementClass);
   }
 
+  @NotNull
   public List<IntentionAction> getAllQuickFixes() {
     List<HighlightInfo> infos = doHighlighting();
     List<IntentionAction> actions = new ArrayList<>();
@@ -315,6 +319,7 @@ public class EditorTestFixture {
     return actions;
   }
 
+  @NotNull
   public List<Crumb> getBreadcrumbsAtCaret() {
     FileBreadcrumbsCollector breadcrumbsCollector = FileBreadcrumbsCollector.findBreadcrumbsCollector(myProject, myFile);
     return ContainerUtil.newArrayList(breadcrumbsCollector.computeCrumbs(myFile, myEditor.getDocument(), myEditor.getCaretModel().getOffset(), true));

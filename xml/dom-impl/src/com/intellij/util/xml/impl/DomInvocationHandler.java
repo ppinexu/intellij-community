@@ -12,6 +12,7 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.SmartPointerManager;
 import com.intellij.psi.SmartPsiElementPointer;
 import com.intellij.psi.XmlElementFactory;
+import com.intellij.psi.impl.source.xml.XmlStubBasedTagBase;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.stubs.Stub;
 import com.intellij.psi.util.PsiUtilCore;
@@ -47,7 +48,7 @@ import java.util.List;
  * @author peter
  */
 public abstract class DomInvocationHandler extends UserDataHolderBase implements InvocationHandler, DomElement {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.util.xml.impl.DomInvocationHandler");
+  private static final Logger LOG = Logger.getInstance(DomInvocationHandler.class);
   public static final Method ACCEPT_METHOD = ReflectionUtil.getMethod(DomElement.class, "accept", DomElementVisitor.class);
   public static final Method ACCEPT_CHILDREN_METHOD = ReflectionUtil.getMethod(DomElement.class, "acceptChildren", DomElementVisitor.class);
   private static final JavaMethod ourGetValue = JavaMethod.getMethod(GenericValue.class, new JavaMethodSignature("getValue"));
@@ -789,7 +790,7 @@ public abstract class DomInvocationHandler extends UserDataHolderBase implements
   }
 
   public List<? extends DomElement> getCollectionChildren(final AbstractCollectionChildDescription description) {
-    return getCollectionChildren(description, true);
+    return getCollectionChildren(description, XmlStubBasedTagBase.shouldProcessIncludesNow());
   }
 
   public List<? extends DomElement> getCollectionChildren(final AbstractCollectionChildDescription description, boolean processIncludes) {

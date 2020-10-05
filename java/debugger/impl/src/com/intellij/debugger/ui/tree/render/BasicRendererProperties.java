@@ -3,13 +3,14 @@ package com.intellij.debugger.ui.tree.render;
 
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.JDOMExternalizerUtil;
+import com.intellij.openapi.util.NlsSafe;
 import org.jdom.Element;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public final class BasicRendererProperties implements Cloneable {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.debugger.ui.tree.render.BasicRendererProperties");
+  private static final Logger LOG = Logger.getInstance(BasicRendererProperties.class);
 
   private static final @NonNls String NAME_OPTION = "NAME";
   private String myName;
@@ -29,7 +30,7 @@ public final class BasicRendererProperties implements Cloneable {
     myEnabledDefaultValue = enabledDefaultValue;
   }
 
-  public String getName() {
+  public @NlsSafe String getName() {
     return myName;
   }
 

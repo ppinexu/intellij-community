@@ -1,6 +1,7 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.psi.expectedTypes;
 
+import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.openapi.util.Pair;
 import com.intellij.psi.*;
 import com.intellij.psi.tree.IElementType;
@@ -44,15 +45,20 @@ import org.jetbrains.plugins.groovy.lang.psi.util.GroovyPropertyUtils;
 import org.jetbrains.plugins.groovy.lang.psi.util.PsiUtil;
 import org.jetbrains.plugins.groovy.lang.psi.util.PsiUtilKt;
 import org.jetbrains.plugins.groovy.lang.resolve.ResolveUtil;
+import org.jetbrains.plugins.groovy.lang.resolve.api.GroovyMethodCallReference;
+import org.jetbrains.plugins.groovy.lang.resolve.api.JustTypeArgument;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import static org.jetbrains.plugins.groovy.lang.resolve.impl.CallReferenceImplKt.resolveWithArguments;
+
 /**
  * @author ven
  */
-public class GroovyExpectedTypesProvider {
+public final class GroovyExpectedTypesProvider {
+  private static final ExtensionPointName<GroovyExpectedTypesContributor> EP_NAME = new ExtensionPointName<>("org.intellij.groovy.expectedTypesContributor");
 
   public static TypeConstraint[] calculateTypeConstraints(@NotNull final GrExpression expression) {
     return TypeInferenceHelper.getCurrentContext().getCachedValue(expression, () -> {
@@ -67,7 +73,7 @@ public class GroovyExpectedTypesProvider {
         final TypeConstraint[] result = calculator.getResult();
 
       List<TypeConstraint> custom = new ArrayList<>();
-        for (GroovyExpectedTypesContributor contributor : GroovyExpectedTypesContributor.EP_NAME.getExtensions()) {
+        for (GroovyExpectedTypesContributor contributor : EP_NAME.getExtensionList()) {
           custom.addAll(contributor.calculateTypeConstraints(expression));
         }
 
@@ -291,8 +297,7 @@ public class GroovyExpectedTypesProvider {
        type instanceof PsiClassType && ((PsiClassType)type).resolve() != null && ((PsiClassType)type).resolve().isEnum();
     }
 
-    @NotNull
-    private static TypeConstraint[] createSimpleSubTypeResult(@NotNull PsiType type) {
+    private static TypeConstraint @NotNull [] createSimpleSubTypeResult(@NotNull PsiType type) {
       return new TypeConstraint[]{new SubtypeConstraint(type, type)};
     }
 
@@ -336,10 +341,10 @@ public class GroovyExpectedTypesProvider {
     }
 
     private void processCallVariants(@NotNull PsiElement place,
-                                     @NotNull GroovyResolveResult[] variants,
-                                     @NotNull GrNamedArgument[] namedArguments,
-                                     @NotNull GrExpression[] expressionArguments,
-                                     @NotNull GrClosableBlock[] closureArguments) {
+                                     GroovyResolveResult @NotNull [] variants,
+                                     GrNamedArgument @NotNull [] namedArguments,
+                                     GrExpression @NotNull [] expressionArguments,
+                                     GrClosableBlock @NotNull [] closureArguments) {
 
       List<Pair<PsiParameter, PsiType>> expectedParams =
         ResolveUtil.collectExpectedParamsByArg(place, variants, namedArguments, expressionArguments, closureArguments, myExpression);
@@ -451,11 +456,8 @@ public class GroovyExpectedTypesProvider {
         @Override
         public boolean satisfied(PsiType type, @NotNull PsiElement context) {
           final PsiType boxed = TypesUtil.boxPrimitiveType(type, context.getManager(), context.getResolveScope());
-          final IElementType opToken = expression.getOperationTokenType();
-          final GrExpression operand = expression.getOperand();
-          final GroovyResolveResult[] candidates =
-            TypesUtil.getOverloadedUnaryOperatorCandidates(boxed, opToken, operand != null ? operand : expression, PsiType.EMPTY_ARRAY);
-          return candidates.length > 0;
+          final GroovyMethodCallReference reference = expression.getReference();
+          return !resolveWithArguments(new JustTypeArgument(boxed), reference.getMethodName(), reference.getArguments(), reference.getElement()).isEmpty();
         }
 
         @NotNull

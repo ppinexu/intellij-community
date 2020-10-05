@@ -4,8 +4,10 @@ package org.jetbrains.plugins.gradle.frameworkSupport;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.Function;
+import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
 import org.gradle.util.GradleVersion;
+import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -104,7 +106,7 @@ public class BuildScriptDataBuilder {
   private void addBuildscriptLines(@NotNull List<? super String> lines, @NotNull Function<? super String, String> padding) {
     if (!buildScriptRepositories.isEmpty() || !buildScriptDependencies.isEmpty() || !buildScriptProperties.isEmpty()) {
       lines.add("buildscript {");
-      final List<String> buildScriptLines = ContainerUtil.newSmartList();
+      final List<String> buildScriptLines = new SmartList<>();
       if (!buildScriptProperties.isEmpty()) {
         buildScriptLines.addAll(buildScriptProperties);
         buildScriptLines.add("");
@@ -125,55 +127,55 @@ public class BuildScriptDataBuilder {
     }
   }
 
-  public BuildScriptDataBuilder addImport(@NotNull String importString) {
+  public BuildScriptDataBuilder addImport(@NonNls @NotNull String importString) {
     imports.add(importString);
     return this;
   }
 
-  public BuildScriptDataBuilder addBuildscriptPropertyDefinition(@NotNull String definition) {
+  public BuildScriptDataBuilder addBuildscriptPropertyDefinition(@NonNls @NotNull String definition) {
     buildScriptProperties.add(definition.trim());
     return this;
   }
 
-  public BuildScriptDataBuilder addBuildscriptRepositoriesDefinition(@NotNull String definition) {
+  public BuildScriptDataBuilder addBuildscriptRepositoriesDefinition(@NonNls @NotNull String definition) {
     buildScriptRepositories.add(definition.trim());
     return this;
   }
 
-  public BuildScriptDataBuilder addBuildscriptDependencyNotation(@NotNull String notation) {
+  public BuildScriptDataBuilder addBuildscriptDependencyNotation(@NonNls @NotNull String notation) {
     buildScriptDependencies.add(notation.trim());
     return this;
   }
 
-  public BuildScriptDataBuilder addPluginDefinitionInPluginsGroup(@NotNull String definition) {
+  public BuildScriptDataBuilder addPluginDefinitionInPluginsGroup(@NonNls @NotNull String definition) {
     pluginsInGroup.add(definition.trim());
     return this;
   }
 
-  public BuildScriptDataBuilder addPluginDefinition(@NotNull String definition) {
+  public BuildScriptDataBuilder addPluginDefinition(@NonNls @NotNull String definition) {
     plugins.add(definition.trim());
     return this;
   }
 
-  public BuildScriptDataBuilder addRepositoriesDefinition(@NotNull String definition) {
+  public BuildScriptDataBuilder addRepositoriesDefinition(@NonNls @NotNull String definition) {
     repositories.add(definition.trim());
     return this;
   }
 
-  public BuildScriptDataBuilder addDependencyNotation(@NotNull String notation) {
+  public BuildScriptDataBuilder addDependencyNotation(@NonNls @NotNull String notation) {
     dependencies.add(notation.trim());
     return this;
   }
 
-  public BuildScriptDataBuilder addPropertyDefinition(@NotNull String definition) {
+  public BuildScriptDataBuilder addPropertyDefinition(@NonNls @NotNull String definition) {
     properties.add(definition.trim());
     return this;
   }
 
-  public BuildScriptDataBuilder addOther(@NotNull String definition) {
+  public BuildScriptDataBuilder addOther(@NonNls @NotNull String definition) {
     other.add(definition.trim());
     return this;
   }
 
-  private static String padding(String s) {return StringUtil.isNotEmpty(s) ? "    " + s : "";}
+  private static String padding(@NonNls String s) {return StringUtil.isNotEmpty(s) ? "    " + s : "";}
 }

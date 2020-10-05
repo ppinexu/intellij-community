@@ -20,32 +20,22 @@ import com.intellij.diagnostic.hprof.classstore.ClassStore
 import com.intellij.diagnostic.hprof.classstore.InstanceField
 import com.intellij.diagnostic.hprof.classstore.StaticField
 import com.intellij.diagnostic.hprof.parser.*
-import gnu.trove.TLongArrayList
-import gnu.trove.TLongLongHashMap
-import gnu.trove.TLongObjectHashMap
-import gnu.trove.TObjectLongHashMap
+import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap
+import it.unimi.dsi.fastutil.longs.Long2ObjectMap
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap
+import it.unimi.dsi.fastutil.longs.LongArrayList
 
-class CreateClassStoreVisitor : HProfVisitor() {
+internal class CreateClassStoreVisitor(private val stringIdMap: Long2ObjectMap<String>) : HProfVisitor() {
+  private val classIDToNameStringID = Long2LongOpenHashMap()
 
-  private val stringIDToString = TLongObjectHashMap<String?>()
-  private val classIDToNameStringID = TLongLongHashMap()
-
-  private val fieldToNameID = TObjectLongHashMap<InstanceField>()
-  private val staticFieldToNameID = TObjectLongHashMap<StaticField>()
-
-  private val result = TLongObjectHashMap<ClassDefinition>()
+  private val result = Long2ObjectOpenHashMap<ClassDefinition>()
   private var completed = false
-  private var namesUpdated = false
-
-  fun getStringIDToStringMap(): TLongObjectHashMap<String?> {
-    assert(completed)
-    return stringIDToString
-  }
 
   override fun preVisit() {
     disableAll()
     enable(RecordType.LoadClass)
     enable(HeapDumpRecordType.ClassDump)
+    classIDToNameStringID.clear()
   }
 
   override fun postVisit() {
@@ -53,7 +43,6 @@ class CreateClassStoreVisitor : HProfVisitor() {
   }
 
   override fun visitLoadClass(classSerialNumber: Long, classObjectId: Long, stackSerialNumber: Long, classNameStringId: Long) {
-    stringIDToString.put(classNameStringId, null)
     classIDToNameStringID.put(classObjectId, classNameStringId)
   }
 
@@ -66,75 +55,50 @@ class CreateClassStoreVisitor : HProfVisitor() {
     constants: Array<ConstantPoolEntry>,
     staticFields: Array<StaticFieldEntry>,
     instanceFields: Array<InstanceFieldEntry>) {
-    val instanceFieldList = mutableListOf<InstanceField>()
-    val staticFieldList = mutableListOf<StaticField>()
+    val refInstanceFields = mutableListOf<InstanceField>()
+    val primitiveInstanceFields = mutableListOf<InstanceField>()
     var currentOffset = 0
     instanceFields.forEach {
+      val fieldName = stringIdMap[it.fieldNameStringId]
+      val field = InstanceField(fieldName, currentOffset, it.type)
       if (it.type != Type.OBJECT) {
+        primitiveInstanceFields.add(field)
         currentOffset += it.type.size
       }
       else {
-        val field = InstanceField("<missingFieldName>", currentOffset)
-        instanceFieldList.add(field)
-        fieldToNameID.put(field, it.fieldNameStringId)
-        stringIDToString.put(it.fieldNameStringId, null)
+        refInstanceFields.add(field)
         currentOffset += visitorContext.idSize
       }
     }
-    val constantsArray = TLongArrayList(constants.size)
-    constants.filter { it.type == Type.OBJECT }.forEach { constantsArray.add(it.value) }
-    val objectStaticFields = staticFields.filter { it.type == Type.OBJECT }
-    objectStaticFields.forEach {
-      val field = StaticField("<missingFieldName>", it.value)
-      staticFieldList.add(field)
-      staticFieldToNameID.put(field, it.fieldNameStringId)
-      stringIDToString.put(it.fieldNameStringId, null)
-    }
-    result.put(classId,
-               ClassDefinition(
-                 "<missingClassName>",
-                 classId,
-                 superClassId,
-                 instanceSize.toInt(),
-                 currentOffset,
-                 instanceFieldList.toTypedArray(),
-                 constantsArray.toNativeArray(),
-                 staticFieldList.toTypedArray()
-               ))
-  }
+    val constantsArray = LongArrayList(constants.size)
+    constants.asSequence()
+      .filter { it.type == Type.OBJECT }
+      .forEach { constantsArray.add(it.value) }
+    val objectStaticFieldList = staticFields.asSequence()
+      .filter { it.type == Type.OBJECT }
+      .map { StaticField(stringIdMap[it.fieldNameStringId], it.value) }
+    val primitiveStaticFieldList = staticFields.asSequence()
+      .filter { it.type != Type.OBJECT }
+      .map { StaticField(stringIdMap[it.fieldNameStringId], it.value) }
 
-  fun updateNames() {
-    result.transformValues { classDefinition ->
-      val className = stringIDToString[classIDToNameStringID[classDefinition.id]]!!.replace('/', '.')
-      ClassDefinition(
-        className,
-        classDefinition.id,
-        classDefinition.superClassId,
-        classDefinition.instanceSize,
-        classDefinition.superClassOffset,
-        classDefinition.refInstanceFields.map { fieldObj ->
-          val nameId = fieldToNameID[fieldObj]
-          InstanceField(
-            stringIDToString[nameId]!!,
-            fieldObj.offset
-          )
-        }.toTypedArray(),
-        classDefinition.constantFields,
-        classDefinition.staticFields.map { fieldObj ->
-          val nameId = staticFieldToNameID[fieldObj]
-          StaticField(
-            stringIDToString[nameId]!!,
-            fieldObj.objectId
-          )
-        }.toTypedArray()
-      )
-    }
-    namesUpdated = true
+    val classDefinition = ClassDefinition(
+      name = stringIdMap.get(classIDToNameStringID.get(classId)).replace('/', '.'),
+      id = classId,
+      superClassId = superClassId,
+      classLoaderId = classloaderClassId,
+      instanceSize = instanceSize.toInt(),
+      superClassOffset = currentOffset,
+      refInstanceFields = refInstanceFields.toTypedArray(),
+      primitiveInstanceFields = primitiveInstanceFields.toTypedArray(),
+      constantFields = constantsArray.toLongArray(),
+      objectStaticFields = objectStaticFieldList.toList().toTypedArray(),
+      primitiveStaticFields = primitiveStaticFieldList.toList().toTypedArray()
+    )
+    result.put(classId, classDefinition)
   }
 
   fun getClassStore(): ClassStore {
     assert(completed)
-    assert(namesUpdated)
     return ClassStore(result)
   }
 }

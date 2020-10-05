@@ -4,6 +4,7 @@ package com.intellij.codeInspection.bytecodeAnalysis;
 import com.intellij.codeInsight.NullableNotNullManager;
 import com.intellij.codeInspection.dataFlow.ContractReturnValue;
 import com.intellij.codeInspection.dataFlow.JavaMethodContractUtil;
+import com.intellij.codeInspection.dataFlow.MutationSignature;
 import com.intellij.codeInspection.dataFlow.StandardMethodContract;
 import com.intellij.codeInspection.dataFlow.StandardMethodContract.ValueConstraint;
 import com.intellij.openapi.components.ServiceManager;
@@ -33,7 +34,6 @@ import org.jetbrains.org.objectweb.asm.ClassReader;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.security.MessageDigest;
 import java.util.*;
 import java.util.function.Function;
 
@@ -90,16 +90,14 @@ public class ProjectBytecodeAnalysis {
     return null;
   }
 
-  @NotNull
-  public PsiAnnotation[] findInferredAnnotations(@NotNull PsiModifierListOwner listOwner) {
+  public PsiAnnotation @NotNull [] findInferredAnnotations(@NotNull PsiModifierListOwner listOwner) {
     if (!(listOwner instanceof PsiCompiledElement)) {
       return PsiAnnotation.EMPTY_ARRAY;
     }
     return CachedValuesManager.getCachedValue(listOwner, () -> CachedValueProvider.Result.create(collectInferredAnnotations(listOwner), listOwner));
   }
 
-  @NotNull
-  private PsiAnnotation[] collectInferredAnnotations(PsiModifierListOwner listOwner) {
+  private PsiAnnotation @NotNull [] collectInferredAnnotations(PsiModifierListOwner listOwner) {
     PsiFile psiFile = listOwner.getContainingFile();
     VirtualFile file = psiFile == null ? null : psiFile.getVirtualFile();
     if (file != null && ClassDataIndexer.isFileExcluded(file)) {
@@ -107,8 +105,7 @@ public class ProjectBytecodeAnalysis {
     }
 
     try {
-      MessageDigest md = BytecodeAnalysisConverter.getMessageDigest();
-      EKey primaryKey = getKey(listOwner, md);
+      EKey primaryKey = getKey(listOwner);
       if (primaryKey == null) {
         return PsiAnnotation.EMPTY_ARRAY;
       }
@@ -148,20 +145,23 @@ public class ProjectBytecodeAnalysis {
    * @param methodAnnotations inferred annotations
    * @return Psi annotations
    */
-  @NotNull
-  private PsiAnnotation[] toPsi(EKey primaryKey, MethodAnnotations methodAnnotations) {
+  private PsiAnnotation @NotNull [] toPsi(EKey primaryKey, MethodAnnotations methodAnnotations) {
     boolean notNull = methodAnnotations.notNulls.contains(primaryKey);
     boolean nullable = methodAnnotations.nullables.contains(primaryKey);
-    boolean pure = methodAnnotations.pures.contains(primaryKey);
+    MutationSignature mutationSignature = methodAnnotations.mutates.getOrDefault(primaryKey, MutationSignature.unknown());
+    Map<String, String> annotationParameters = new LinkedHashMap<>();
     String contractValues = methodAnnotations.contractsValues.get(primaryKey);
-    String contractPsiText = null;
-
     if (contractValues != null) {
-      contractPsiText = pure ? "value=" + contractValues + ",pure=true" : contractValues;
+      annotationParameters.put("value", contractValues);
     }
-    else if (pure) {
-      contractPsiText = "pure=true";
+    if (mutationSignature.isPure()) {
+      annotationParameters.put("pure", "true");
     }
+    else if (mutationSignature != MutationSignature.unknown()) {
+      annotationParameters.put("mutates", "\"" + mutationSignature + '"');
+    }
+
+    String contractPsiText = generateAnnotationAttributesText(annotationParameters);
 
     PsiAnnotation psiAnnotation = contractPsiText == null ? null : createContractAnnotation(contractPsiText);
 
@@ -183,14 +183,24 @@ public class ProjectBytecodeAnalysis {
     return PsiAnnotation.EMPTY_ARRAY;
   }
 
+  @Nullable
+  private static String generateAnnotationAttributesText(Map<String, String> attributesMap) {
+    if (attributesMap.isEmpty()) {
+      return null;
+    }
+    if (attributesMap.keySet().equals(Collections.singleton(PsiAnnotation.DEFAULT_REFERENCED_METHOD_NAME))) {
+      return ContainerUtil.getOnlyItem(attributesMap.values());
+    }
+    return EntryStream.of(attributesMap).join("=").joining(",");
+  }
+
   /**
    * Converts inferred parameter annotations to Psi annotations
    *
    * @param parameterAnnotations inferred parameter annotations
    * @return Psi annotations
    */
-  @NotNull
-  private PsiAnnotation[] toPsi(ParameterAnnotations parameterAnnotations) {
+  private PsiAnnotation @NotNull [] toPsi(ParameterAnnotations parameterAnnotations) {
     if (parameterAnnotations.notNull) {
       return new PsiAnnotation[]{getNotNullAnnotation()};
     }
@@ -220,7 +230,7 @@ public class ProjectBytecodeAnalysis {
   }
 
   @Nullable
-  public EKey getKey(@NotNull PsiModifierListOwner owner, MessageDigest md) {
+  public EKey getKey(@NotNull PsiModifierListOwner owner) {
     LOG.assertTrue(owner instanceof PsiCompiledElement, owner);
     EKey key = null;
     if (owner instanceof PsiMethod) {
@@ -239,7 +249,7 @@ public class ProjectBytecodeAnalysis {
         }
       }
     }
-    return key == null ? null : myEquationProvider.adaptKey(key, md);
+    return key == null ? null : myEquationProvider.adaptKey(key);
   }
 
   /**
@@ -417,14 +427,15 @@ public class ProjectBytecodeAnalysis {
     throws EquationsLimitException {
     List<StandardMethodContract> contractClauses = new ArrayList<>();
     Set<EKey> notNulls = methodAnnotations.notNulls;
-    Set<EKey> pures = methodAnnotations.pures;
+    Map<EKey, MutationSignature> mutations = methodAnnotations.mutates;
     Map<EKey, String> contracts = methodAnnotations.contractsValues;
 
     ContractReturnValue fullReturnValue = methodAnnotations.returnValue.asContractReturnValue();
     for (Map.Entry<EKey, Value> entry : solution.entrySet()) {
       // NB: keys from Psi are always stable, so we need to stabilize keys from equations
       Value value = entry.getValue();
-      if (value == Value.Top || value == Value.Bot || (value == Value.Fail && !pures.contains(methodKey))) {
+      if (value == Value.Top || value == Value.Bot || 
+          (value == Value.Fail && !mutations.getOrDefault(methodKey, MutationSignature.unknown()).isPure())) {
         continue;
       }
       EKey key = entry.getKey().mkStable();
@@ -437,7 +448,7 @@ public class ProjectBytecodeAnalysis {
         notNulls.add(methodKey);
       }
       else if (value == Value.Pure && direction == Pure) {
-        pures.add(methodKey);
+        mutations.put(methodKey, MutationSignature.pure());
       }
       else if (direction instanceof ParamValueBasedDirection) {
         ContractReturnValue contractReturnValue =
@@ -538,7 +549,7 @@ public class ProjectBytecodeAnalysis {
       project.getMessageBus().connect().subscribe(PsiModificationTracker.TOPIC, myEquationCache::clear);
     }
 
-    abstract EKey adaptKey(@NotNull EKey key, MessageDigest messageDigest);
+    abstract EKey adaptKey(@NotNull EKey key);
 
     abstract List<Equations> getEquations(MemberDescriptor method);
   }
@@ -553,7 +564,7 @@ public class ProjectBytecodeAnalysis {
     }
 
     @Override
-    public EKey adaptKey(@NotNull EKey key, MessageDigest messageDigest) {
+    public EKey adaptKey(@NotNull EKey key) {
       assert key.member instanceof Member;
       return key;
     }
@@ -617,13 +628,13 @@ public class ProjectBytecodeAnalysis {
     }
 
     @Override
-    public EKey adaptKey(@NotNull EKey key, MessageDigest messageDigest) {
-      return key.hashed(messageDigest);
+    public EKey adaptKey(@NotNull EKey key) {
+      return key.hashed();
     }
 
     @Override
     public List<Equations> getEquations(MemberDescriptor method) {
-      HMember key = method.hashed(null);
+      HMember key = method.hashed();
       return myEquationCache.computeIfAbsent(key, m -> ClassDataIndexer.getEquations(ProjectScope.getLibrariesScope(myProject), m));
     }
   }
@@ -635,7 +646,7 @@ class MethodAnnotations {
   // @Nullable keys
   final Set<EKey> nullables = new HashSet<>(1);
   // @Contract(pure=true) part of contract
-  final Set<EKey> pures = new HashSet<>(1);
+  final Map<EKey, MutationSignature> mutates = new HashMap<>(1);
   // @Contracts
   final Map<EKey, String> contractsValues = new HashMap<>();
   DataValue returnValue = DataValue.UnknownDataValue1;

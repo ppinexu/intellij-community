@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.diff.merge;
 
 import com.intellij.diff.util.DiffUtil;
@@ -12,11 +12,12 @@ import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.event.DocumentEvent;
 import com.intellij.openapi.editor.event.DocumentListener;
 import com.intellij.openapi.project.Project;
-import com.intellij.util.containers.ContainerUtil;
+import com.intellij.openapi.util.NlsContexts;
+import com.intellij.util.SmartList;
+import com.intellij.util.concurrency.annotations.RequiresEdt;
+import com.intellij.util.concurrency.annotations.RequiresWriteLock;
 import gnu.trove.TIntArrayList;
 import gnu.trove.TIntHashSet;
-import org.jetbrains.annotations.CalledInAwt;
-import org.jetbrains.annotations.CalledWithWriteLock;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -50,7 +51,7 @@ public abstract class MergeModelBase<S extends MergeModelBase.State> implements 
   }
 
   @Override
-  @CalledInAwt
+  @RequiresEdt
   public void dispose() {
     if (myDisposed) return;
     myDisposed = true;
@@ -87,7 +88,7 @@ public abstract class MergeModelBase<S extends MergeModelBase.State> implements 
     }
   }
 
-  @CalledInAwt
+  @RequiresEdt
   public boolean isInsideCommand() {
     return myInsideCommand;
   }
@@ -104,7 +105,7 @@ public abstract class MergeModelBase<S extends MergeModelBase.State> implements 
   // Repaint
   //
 
-  @CalledInAwt
+  @RequiresEdt
   public void invalidateHighlighters(int index) {
     if (myBulkChangeUpdateDepth > 0) {
       myChangesToUpdate.add(index);
@@ -114,12 +115,12 @@ public abstract class MergeModelBase<S extends MergeModelBase.State> implements 
     }
   }
 
-  @CalledInAwt
+  @RequiresEdt
   public void enterBulkChangeUpdateBlock() {
     myBulkChangeUpdateDepth++;
   }
 
-  @CalledInAwt
+  @RequiresEdt
   public void exitBulkChangeUpdateBlock() {
     myBulkChangeUpdateDepth--;
     LOG.assertTrue(myBulkChangeUpdateDepth >= 0);
@@ -133,7 +134,7 @@ public abstract class MergeModelBase<S extends MergeModelBase.State> implements 
     }
   }
 
-  @CalledInAwt
+  @RequiresEdt
   protected abstract void reinstallHighlighters(int index);
 
   //
@@ -141,17 +142,17 @@ public abstract class MergeModelBase<S extends MergeModelBase.State> implements 
   //
 
   @NotNull
-  @CalledInAwt
+  @RequiresEdt
   protected abstract S storeChangeState(int index);
 
-  @CalledInAwt
+  @RequiresEdt
   protected void restoreChangeState(@NotNull S state) {
     setLineStart(state.myIndex, state.myStartLine);
     setLineEnd(state.myIndex, state.myEndLine);
   }
 
   @Nullable
-  @CalledInAwt
+  @RequiresEdt
   protected S processDocumentChange(int index, int oldLine1, int oldLine2, int shift) {
     int line1 = getLineStart(index);
     int line2 = getLineEnd(index);
@@ -180,7 +181,7 @@ public abstract class MergeModelBase<S extends MergeModelBase.State> implements 
       LineRange lineRange = DiffUtil.getAffectedLineRange(e);
       int shift = DiffUtil.countLinesShift(e);
 
-      List<S> corruptedStates = ContainerUtil.newSmartList();
+      List<S> corruptedStates = new SmartList<>();
       for (int index = 0; index < getChangesCount(); index++) {
         S oldState = processDocumentChange(index, lineRange.start, lineRange.end, shift);
         if (oldState == null) continue;
@@ -203,7 +204,7 @@ public abstract class MergeModelBase<S extends MergeModelBase.State> implements 
     }
   }
 
-  public boolean executeMergeCommand(@Nullable String commandName,
+  public boolean executeMergeCommand(@Nullable @NlsContexts.Command String commandName,
                                      @Nullable String commandGroupId,
                                      @NotNull UndoConfirmationPolicy confirmationPolicy,
                                      boolean underBulkUpdate,
@@ -302,7 +303,7 @@ public abstract class MergeModelBase<S extends MergeModelBase.State> implements 
   // Actions
   //
 
-  @CalledWithWriteLock
+  @RequiresWriteLock
   public void replaceChange(int index, @NotNull List<? extends CharSequence> newContent) {
     LOG.assertTrue(isInsideCommand());
     int outputStartLine = getLineStart(index);
@@ -316,7 +317,7 @@ public abstract class MergeModelBase<S extends MergeModelBase.State> implements 
     }
   }
 
-  @CalledWithWriteLock
+  @RequiresWriteLock
   public void appendChange(int index, @NotNull List<? extends CharSequence> newContent) {
     LOG.assertTrue(isInsideCommand());
     int outputStartLine = getLineStart(index);
@@ -357,7 +358,7 @@ public abstract class MergeModelBase<S extends MergeModelBase.State> implements 
         continue;
       }
 
-      int newStartLine = beforeChange ? Math.min(startLine, newOutputStartLine) : Math.max(startLine, newOutputEndLine);
+      int newStartLine = beforeChange ? Math.min(startLine, newOutputStartLine) : newOutputEndLine;
       int newEndLine = beforeChange ? Math.min(endLine, newOutputStartLine) : Math.max(endLine, newOutputEndLine);
       if (startLine != newStartLine || endLine != newEndLine) {
         setLineStart(otherIndex, newStartLine);
@@ -373,7 +374,7 @@ public abstract class MergeModelBase<S extends MergeModelBase.State> implements 
    * null means all changes could be affected
    */
   @NotNull
-  @CalledInAwt
+  @RequiresEdt
   private TIntArrayList collectAffectedChanges(@NotNull TIntArrayList directChanges) {
     TIntArrayList result = new TIntArrayList(directChanges.size());
 

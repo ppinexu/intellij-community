@@ -38,7 +38,7 @@ abstract class RunAnythingCommandLineProviderTestCase : UsefulTestCase() {
       override fun suggestCompletionVariants(dataContext: DataContext, commandLine: CommandLine) =
         variants.asSequence()
 
-      override fun runAnything(dataContext: DataContext, commandLine: CommandLine) = true
+      override fun run(dataContext: DataContext, commandLine: CommandLine) = true
     }
     val emptyDataContext = DataContext { }
     val values = provider.getValues(emptyDataContext, "$prefix $command")
@@ -60,7 +60,7 @@ abstract class RunAnythingCommandLineProviderTestCase : UsefulTestCase() {
         return emptySequence()
       }
 
-      override fun runAnything(dataContext: DataContext, commandLine: CommandLine): Boolean {
+      override fun run(dataContext: DataContext, commandLine: CommandLine): Boolean {
         action(commandLine)
         isRunningTouched = true
         return true
@@ -71,5 +71,21 @@ abstract class RunAnythingCommandLineProviderTestCase : UsefulTestCase() {
     provider.execute(emptyDataContext, "$prefix $command")
     assertTrue(isSuggestingTouched)
     assertTrue(isRunningTouched)
+  }
+
+  fun createDummyCommandLineProvider(): RunAnythingCommandLineProvider {
+    return object : RunAnythingCommandLineProvider() {
+      override fun getHelpCommand() = this@RunAnythingCommandLineProviderTestCase.helpCommand
+
+      override fun getHelpCommandAliases() = helpCommandAliases
+
+      override fun suggestCompletionVariants(dataContext: DataContext, commandLine: CommandLine): Sequence<String> {
+        return emptySequence()
+      }
+
+      override fun run(dataContext: DataContext, commandLine: CommandLine): Boolean {
+        return true
+      }
+    }
   }
 }

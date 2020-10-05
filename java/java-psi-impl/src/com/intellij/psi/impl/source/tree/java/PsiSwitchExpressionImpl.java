@@ -95,12 +95,8 @@ public class PsiSwitchExpressionImpl extends PsiSwitchBlockImpl implements PsiSw
       if (TypeConversionUtil.isPrimitiveAndNotNull(type)) {
         type = ((PsiPrimitiveType)type).getBoxedType(this);
       }
-      if (leastUpperBound == PsiType.NULL) {
-        leastUpperBound = type;
-      }
-      else {
-        leastUpperBound = GenericsUtil.getLeastUpperBound(type, leastUpperBound, getManager());
-      }
+      
+      leastUpperBound = GenericsUtil.getLeastUpperBound(type, leastUpperBound, getManager());
     }
     return leastUpperBound != null ? PsiUtil.captureToplevelWildcards(leastUpperBound, this) : null;
   }

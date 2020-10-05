@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.ui.update;
 
 import com.intellij.concurrency.JobScheduler;
@@ -284,7 +284,7 @@ public class MergingUpdateQueueTest extends UsefulTestCase {
     }
   }
 
-  private static class MyQueue extends MergingUpdateQueue {
+  private static final class MyQueue extends MergingUpdateQueue {
     private boolean myExecuted;
 
     private MyQueue() {
@@ -293,7 +293,6 @@ public class MergingUpdateQueueTest extends UsefulTestCase {
 
     private MyQueue(int mergingTimeSpan) {
       super("Test", mergingTimeSpan, false, null);
-      setPassThrough(false);
     }
 
     @Override
@@ -306,7 +305,7 @@ public class MergingUpdateQueueTest extends UsefulTestCase {
     }
 
     @Override
-    protected void execute(@NotNull final Update[] update) {
+    protected void execute(final Update @NotNull [] update) {
       super.execute(update);
       myExecuted = true;
     }
@@ -406,7 +405,6 @@ public class MergingUpdateQueueTest extends UsefulTestCase {
   public void testAddRequestsInPooledThreadDoNotExecuteConcurrently() throws InterruptedException {
     int delay = 10;
     MergingUpdateQueue queue = new MergingUpdateQueue("x", delay, true, null, getTestRootDisposable(), null, Alarm.ThreadToUse.POOLED_THREAD);
-    queue.setPassThrough(false);
     CountDownLatch startedExecuting1 = new CountDownLatch(1);
     CountDownLatch canContinue = new CountDownLatch(1);
     queue.queue(new Update("1") {

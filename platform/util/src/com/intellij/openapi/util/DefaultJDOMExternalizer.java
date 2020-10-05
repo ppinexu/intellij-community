@@ -1,11 +1,8 @@
-/*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.util;
 
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.util.ReflectionUtil;
-import com.intellij.util.containers.ConcurrentFactoryMap;
 import com.intellij.util.xmlb.annotations.Transient;
 import org.jdom.Element;
 import org.jdom.Verifier;
@@ -18,16 +15,15 @@ import java.lang.reflect.Modifier;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentMap;
+import java.util.function.Predicate;
 
 /**
  * @deprecated use {@link com.intellij.util.xmlb.XmlSerializer} instead
- * @author mike
  */
 @Deprecated
 @SuppressWarnings("HardCodedStringLiteral")
-public class DefaultJDOMExternalizer {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.openapi.util.DefaultJDOMExternalizer");
+public final class DefaultJDOMExternalizer {
+  private static final Logger LOG = Logger.getInstance(DefaultJDOMExternalizer.class);
 
   private DefaultJDOMExternalizer() {
   }
@@ -37,34 +33,51 @@ public class DefaultJDOMExternalizer {
   }
 
   public static void writeExternal(@NotNull Object data, @NotNull Element parentNode) throws WriteExternalException {
-    writeExternal(data, parentNode, null);
+    write(data, parentNode, null);
   }
 
-  private static final ConcurrentMap<Class, Map<String, Field>> ourFieldCache = ConcurrentFactoryMap.createMap(c -> {
-    Map<String, Field> result = new LinkedHashMap<>();
-    for (Field field : c.getFields()) {
-      String name = field.getName();
-      if (name.indexOf('$') >= 0 || result.containsKey(name)) continue;
-      int modifiers = field.getModifiers();
-      if (!Modifier.isPublic(modifiers) || Modifier.isStatic(modifiers) ||
-          Modifier.isTransient(modifiers) || field.getAnnotation(Transient.class) != null) {
-        continue;
-      }
+  private static final ClassValue<Map<String, Field>> fieldCache = new ClassValue<Map<String, Field>>() {
+    @Override
+    protected Map<String, Field> computeValue(Class<?> type) {
+      Map<String, Field> result = new LinkedHashMap<>();
+      for (Field field : type.getFields()) {
+        String name = field.getName();
+        if (name.indexOf('$') >= 0 || result.containsKey(name)) {
+          continue;
+        }
+        int modifiers = field.getModifiers();
+        if (!Modifier.isPublic(modifiers) || Modifier.isStatic(modifiers) ||
+            Modifier.isTransient(modifiers) || field.getAnnotation(Transient.class) != null) {
+          continue;
+        }
 
-      field.setAccessible(true); // class might be non-public
-      if (field.getDeclaringClass().getAnnotation(Transient.class) != null) {
-        continue;
+        field.setAccessible(true); // class might be non-public
+        if (field.getDeclaringClass().getAnnotation(Transient.class) != null) {
+          continue;
+        }
+        result.put(name, field);
       }
-      result.put(name, field);
+      return result;
     }
-    return result;
-  });
+  };
 
   public static void writeExternal(@NotNull Object data,
                                    @NotNull Element parentNode,
                                    @Nullable("null means all elements are accepted") JDOMFilter filter) throws WriteExternalException {
-    for (Field field : ourFieldCache.get(data.getClass()).values()) {
-      if (filter != null && !filter.isAccept(field)) {
+    if (filter instanceof Predicate<?>) {
+      //noinspection unchecked
+      write(data, parentNode, (Predicate<Field>)filter);
+    }
+    else {
+      write(data, parentNode, filter == null ? null : field -> filter.isAccept(field));
+    }
+  }
+
+  public static void write(@NotNull Object data,
+                           @NotNull Element parentNode,
+                           @Nullable("null means all elements are accepted") Predicate<Field> filter) throws WriteExternalException {
+    for (Field field : fieldCache.get(data.getClass()).values()) {
+      if (filter != null && !filter.test(field)) {
         continue;
       }
       Class type = field.getType();
@@ -167,10 +180,10 @@ public class DefaultJDOMExternalizer {
     return value;
   }
 
-  public static void readExternal(@NotNull Object data, Element parentNode) throws InvalidDataException{
+  public static void readExternal(@NotNull Object data, Element parentNode) throws InvalidDataException {
     if (parentNode == null) return;
 
-    Map<String, Field> fields = ourFieldCache.get(data.getClass());
+    Map<String, Field> fields = fieldCache.get(data.getClass());
 
     for (Element e : parentNode.getChildren("option")) {
       String fieldName = e.getAttributeValue("name");
@@ -307,26 +320,25 @@ public class DefaultJDOMExternalizer {
     try {
       i = Integer.parseInt(value);
     }
-    catch (NumberFormatException ex) {
-      throw new InvalidDataException(value, ex);
+    catch (NumberFormatException e) {
+      throw new InvalidDataException(value, e);
     }
     return i;
   }
 
-  public static Color toColor(@Nullable String value) throws InvalidDataException {
-    Color color;
+  public static Color toColor(@Nullable String value) {
     if (value == null) {
-      color = null;
+      return null;
     }
-    else {
-      try {
-        int rgb = Integer.parseInt(value, 16);
-        color = new Color(rgb);
-      }
-      catch (NumberFormatException ex) {
-        LOG.debug("Wrong color value: " + value, ex);
-        throw new InvalidDataException("Wrong color value: " + value, ex);
-      }
+
+    Color color;
+    try {
+      int rgb = Integer.parseInt(value, 16);
+      color = new Color(rgb);
+    }
+    catch (NumberFormatException e) {
+      LOG.debug("Wrong color value: " + value, e);
+      throw new InvalidDataException("Wrong color value: " + value, e);
     }
     return color;
   }

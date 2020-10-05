@@ -6,6 +6,7 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.ex.EditorEx;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.NlsSafe;
 import com.intellij.ui.EditorTextField;
 import com.intellij.xdebugger.XExpression;
 import com.intellij.xdebugger.XSourcePosition;
@@ -33,7 +34,7 @@ public class ArrayTableCellEditor extends AbstractCellEditor implements TableCel
   private final Project myProject;
   private Object myLastValue;
 
-  private static final Logger LOG = Logger.getInstance("#com.jetbrains.python.debugger.array.ArrayTableCellEditor");
+  private static final Logger LOG = Logger.getInstance(ArrayTableCellEditor.class);
 
   public ArrayTableCellEditor(Project project) {
     myProject = project;
@@ -51,6 +52,7 @@ public class ArrayTableCellEditor extends AbstractCellEditor implements TableCel
 
   @Override
   @Nullable
+  @NlsSafe
   public Object getCellEditorValue() {
     if (myEditor.getEditor() != null) {
       return myEditor.getEditor().getDocument().getText();

@@ -2,6 +2,7 @@
 package org.jetbrains.jps.builders.java.dependencyView;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.jps.incremental.relativizer.PathRelativizerService;
 import org.jetbrains.org.objectweb.asm.ClassReader;
 
 import java.io.File;
@@ -13,13 +14,13 @@ import java.util.Set;
 public class ClassFileDependenciesAnalyzer {
   private final DependencyContext myContext;
 
-  public ClassFileDependenciesAnalyzer(File dependenciesDataDir) throws IOException {
-    myContext = new DependencyContext(dependenciesDataDir);
+  public ClassFileDependenciesAnalyzer(File dependenciesDataDir, PathRelativizerService relativizer) throws IOException {
+    myContext = new DependencyContext(dependenciesDataDir, relativizer);
   }
 
   @NotNull
   public Set<String> collectDependencies(String className, ClassReader classReader) {
-    ClassFileRepr classFileRepr = new ClassfileAnalyzer(myContext).analyze(myContext.get(className), classReader);
+    ClassFileRepr classFileRepr = new ClassfileAnalyzer(myContext).analyze(myContext.get(className), classReader, false);
     if (classFileRepr == null) return Collections.emptySet();
     final int classNameId = classFileRepr.name;
     Set<String> classDependencies = new LinkedHashSet<>();

@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.vcs.commit
 
 import com.intellij.CommonBundle.getCancelButtonText
@@ -7,6 +7,7 @@ import com.intellij.openapi.application.runInEdt
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.progress.ProcessCanceledException
+import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages.*
 import com.intellij.openapi.util.Disposer
@@ -184,45 +185,55 @@ abstract class AbstractCommitWorkflow(val project: Project) {
 
   private fun runBeforeCommitChecks(executor: CommitExecutor?): CheckinHandler.ReturnResult {
     var result: CheckinHandler.ReturnResult? = null
-    val checks = Runnable {
+
+    var checks = Runnable {
+      ProgressManager.checkCanceled()
       FileDocumentManager.getInstance().saveAllDocuments()
       result = runBeforeCommitHandlersChecks(executor)
     }
 
-    doRunBeforeCommitChecks(wrapWithCommitMetaHandlers(checks))
+    commitHandlers.filterIsInstance<CheckinMetaHandler>().forEach { metaHandler ->
+      checks = wrapWithCommitMetaHandler(metaHandler, checks)
+    }
+
+    val task = Runnable {
+      try {
+        checks.run()
+      }
+      catch (ignore: ProcessCanceledException) {
+      }
+      catch (e: Throwable) {
+        LOG.error(e)
+      }
+    }
+    doRunBeforeCommitChecks(task)
 
     return result ?: CheckinHandler.ReturnResult.CANCEL
   }
 
   protected open fun doRunBeforeCommitChecks(checks: Runnable) = checks.run()
 
-  private fun wrapWithCommitMetaHandlers(block: Runnable): Runnable {
-    var result = block
-    commitHandlers.filterIsInstance<CheckinMetaHandler>().forEach { metaHandler ->
-      val previousResult = result
-      result = Runnable {
+  private fun wrapWithCommitMetaHandler(metaHandler: CheckinMetaHandler, task: Runnable): Runnable {
+    return Runnable {
+      try {
         LOG.debug("CheckinMetaHandler.runCheckinHandlers: $metaHandler")
-        try {
-          metaHandler.runCheckinHandlers(previousResult)
-        }
-        catch (e: Throwable) {
-          LOG.error(e)
-          previousResult.run()
-        }
+        metaHandler.runCheckinHandlers(task)
+      }
+      catch (e: ProcessCanceledException) {
+        throw e
+      }
+      catch (e: Throwable) {
+        LOG.error(e)
+        task.run()
       }
     }
-    return result
   }
 
   private fun runBeforeCommitHandlersChecks(executor: CommitExecutor?): CheckinHandler.ReturnResult {
     commitHandlers.forEachLoggingErrors(LOG) { handler ->
       try {
-        if (handler.acceptExecutor(executor)) {
-          LOG.debug("CheckinHandler.beforeCheckin: $handler")
-
-          val result = handler.beforeCheckin(executor, commitContext.additionalDataConsumer)
-          if (result != CheckinHandler.ReturnResult.COMMIT) return result
-        }
+        val result = runBeforeCommitHandler(handler, executor)
+        if (result != CheckinHandler.ReturnResult.COMMIT) return result
       }
       catch (e: ProcessCanceledException) {
         return CheckinHandler.ReturnResult.CANCEL
@@ -230,6 +241,13 @@ abstract class AbstractCommitWorkflow(val project: Project) {
     }
 
     return CheckinHandler.ReturnResult.COMMIT
+  }
+
+  protected open fun runBeforeCommitHandler(handler: CheckinHandler, executor: CommitExecutor?): CheckinHandler.ReturnResult {
+    if (!handler.acceptExecutor(executor)) return CheckinHandler.ReturnResult.COMMIT
+    LOG.debug("CheckinHandler.beforeCheckin: $handler")
+
+    return handler.beforeCheckin(executor, commitContext.additionalDataConsumer)
   }
 
   open fun canExecute(executor: CommitExecutor, changes: Collection<Change>): Boolean {
@@ -293,7 +311,8 @@ abstract class AbstractCommitWorkflow(val project: Project) {
       getCommitExecutors(project, getAffectedVcses(changes, project))
 
     internal fun getCommitExecutors(project: Project, vcses: Collection<AbstractVcs>): List<CommitExecutor> =
-      vcses.flatMap { it.commitExecutors } + ChangeListManager.getInstance(project).registeredExecutors
+      vcses.flatMap { it.commitExecutors } + ChangeListManager.getInstance(project).registeredExecutors +
+      LocalCommitExecutor.LOCAL_COMMIT_EXECUTOR.getExtensions(project)
   }
 }
 
